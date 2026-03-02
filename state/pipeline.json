@@ -1,12 +1,12 @@
 {
   "version": "1.0.0",
-  "last_updated": "2026-03-02T11:13:37.448Z",
+  "last_updated": "2026-03-02T12:13:55.310Z",
   "leads": [
     {
-      "id": "b99db113-1cf6-4695-be09-6b354e40a26c",
-      "state": "SIMULATED",
-      "imported_at": "2026-03-02T11:13:34.093Z",
-      "updated_at": "2026-03-02T11:13:37.448Z",
+      "id": "48e13ef2-6ccb-48cf-857e-a177624566b6",
+      "state": "DRAFTED",
+      "imported_at": "2026-03-02T12:02:54.922Z",
+      "updated_at": "2026-03-02T12:13:55.307Z",
       "raw_data": {
         "name": "Sarah Chen",
         "first_name": "Sarah",
@@ -17,6 +17,7 @@
         "source_notes": "Hot lead - met at networking event",
         "notes": "Hot lead - met at networking event"
       },
+      "dedupe_key": "sarah.chen@portlandrealty.com",
       "validation_errors": [],
       "enriched_data": null,
       "draft": {
@@ -27,39 +28,26 @@
         ],
         "confidence_score": 0.8
       },
-      "send_status": {
-        "processed_at": "2026-03-02T11:13:37.448Z"
-      },
+      "send_status": null,
       "history": [
         {
           "from": "IMPORTED",
           "to": "READY_TO_DRAFT",
-          "timestamp": "2026-03-02T11:13:34.117Z"
+          "timestamp": "2026-03-02T12:13:55.307Z"
         },
         {
           "from": "READY_TO_DRAFT",
           "to": "DRAFTED",
-          "timestamp": "2026-03-02T11:13:34.117Z"
-        },
-        {
-          "from": "DRAFTED",
-          "to": "PENDING_SEND",
-          "timestamp": "2026-03-02T11:13:34.139Z"
-        },
-        {
-          "from": "PENDING_SEND",
-          "to": "SIMULATED",
-          "timestamp": "2026-03-02T11:13:37.448Z",
-          "processed_at": "2026-03-02T11:13:37.448Z"
+          "timestamp": "2026-03-02T12:13:55.307Z"
         }
       ],
-      "drafted_at": "2026-03-02T11:13:34.117Z"
+      "drafted_at": "2026-03-02T12:13:55.307Z"
     },
     {
-      "id": "ea18740e-dbed-4b45-b215-3273de0e8b53",
+      "id": "da7e6623-8fd8-4447-ac51-4a927469d3cc",
       "state": "DRAFTED",
-      "imported_at": "2026-03-02T11:13:34.093Z",
-      "updated_at": "2026-03-02T11:13:34.117Z",
+      "imported_at": "2026-03-02T12:02:54.922Z",
+      "updated_at": "2026-03-02T12:13:55.308Z",
       "raw_data": {
         "name": "Marcus Johnson",
         "first_name": "Marcus",
@@ -70,6 +58,7 @@
         "source_notes": "Brokerage team of 5 agents",
         "notes": "Brokerage team of 5 agents"
       },
+      "dedupe_key": "marcus.j@kwportland.com",
       "validation_errors": [],
       "enriched_data": null,
       "draft": {
@@ -85,21 +74,21 @@
         {
           "from": "IMPORTED",
           "to": "READY_TO_DRAFT",
-          "timestamp": "2026-03-02T11:13:34.117Z"
+          "timestamp": "2026-03-02T12:13:55.308Z"
         },
         {
           "from": "READY_TO_DRAFT",
           "to": "DRAFTED",
-          "timestamp": "2026-03-02T11:13:34.117Z"
+          "timestamp": "2026-03-02T12:13:55.308Z"
         }
       ],
-      "drafted_at": "2026-03-02T11:13:34.117Z"
+      "drafted_at": "2026-03-02T12:13:55.308Z"
     },
     {
-      "id": "50351563-1eb1-43c4-9e0f-6627c7a31b89",
+      "id": "8fb55087-22b0-4252-bcd7-94ef0697332d",
       "state": "DRAFTED",
-      "imported_at": "2026-03-02T11:13:34.093Z",
-      "updated_at": "2026-03-02T11:13:34.117Z",
+      "imported_at": "2026-03-02T12:02:54.922Z",
+      "updated_at": "2026-03-02T12:13:55.308Z",
       "raw_data": {
         "name": "Elena Rodriguez",
         "first_name": "Elena",
@@ -110,6 +99,7 @@
         "source_notes": "Specializes in first-time buyers",
         "notes": "Specializes in first-time buyers"
       },
+      "dedupe_key": "elena@elevatepdx.com",
       "validation_errors": [],
       "enriched_data": null,
       "draft": {
@@ -125,21 +115,21 @@
         {
           "from": "IMPORTED",
           "to": "READY_TO_DRAFT",
-          "timestamp": "2026-03-02T11:13:34.117Z"
+          "timestamp": "2026-03-02T12:13:55.308Z"
         },
         {
           "from": "READY_TO_DRAFT",
           "to": "DRAFTED",
-          "timestamp": "2026-03-02T11:13:34.117Z"
+          "timestamp": "2026-03-02T12:13:55.308Z"
         }
       ],
-      "drafted_at": "2026-03-02T11:13:34.117Z"
+      "drafted_at": "2026-03-02T12:13:55.308Z"
     },
     {
-      "id": "cc38eef3-040e-47f5-8984-1e3553256608",
+      "id": "72ebae9c-66bc-4244-914d-411998c709c0",
       "state": "DRAFTED",
-      "imported_at": "2026-03-02T11:13:34.093Z",
-      "updated_at": "2026-03-02T11:13:34.118Z",
+      "imported_at": "2026-03-02T12:02:54.922Z",
+      "updated_at": "2026-03-02T12:13:55.308Z",
       "raw_data": {
         "name": "David Park",
         "first_name": "David",
@@ -150,6 +140,7 @@
         "source_notes": "2-agent team",
         "notes": "2-agent team"
       },
+      "dedupe_key": "david.park@independent.com",
       "validation_errors": [],
       "enriched_data": null,
       "draft": {
@@ -165,21 +156,21 @@
         {
           "from": "IMPORTED",
           "to": "READY_TO_DRAFT",
-          "timestamp": "2026-03-02T11:13:34.118Z"
+          "timestamp": "2026-03-02T12:13:55.308Z"
         },
         {
           "from": "READY_TO_DRAFT",
           "to": "DRAFTED",
-          "timestamp": "2026-03-02T11:13:34.118Z"
+          "timestamp": "2026-03-02T12:13:55.308Z"
         }
       ],
-      "drafted_at": "2026-03-02T11:13:34.118Z"
+      "drafted_at": "2026-03-02T12:13:55.308Z"
     },
     {
-      "id": "bebae8fe-091a-4252-85f0-35c3b37e3359",
+      "id": "c2318cb7-c195-40c0-9821-d857db67f8cc",
       "state": "DRAFTED",
-      "imported_at": "2026-03-02T11:13:34.093Z",
-      "updated_at": "2026-03-02T11:13:34.118Z",
+      "imported_at": "2026-03-02T12:02:54.922Z",
+      "updated_at": "2026-03-02T12:13:55.310Z",
       "raw_data": {
         "name": "Jennifer Walsh",
         "first_name": "Jennifer",
@@ -190,6 +181,7 @@
         "source_notes": "Large team - 8 agents",
         "notes": "Large team - 8 agents"
       },
+      "dedupe_key": "jwalsh@remaxportland.com",
       "validation_errors": [],
       "enriched_data": null,
       "draft": {
@@ -205,15 +197,15 @@
         {
           "from": "IMPORTED",
           "to": "READY_TO_DRAFT",
-          "timestamp": "2026-03-02T11:13:34.118Z"
+          "timestamp": "2026-03-02T12:13:55.310Z"
         },
         {
           "from": "READY_TO_DRAFT",
           "to": "DRAFTED",
-          "timestamp": "2026-03-02T11:13:34.118Z"
+          "timestamp": "2026-03-02T12:13:55.310Z"
         }
       ],
-      "drafted_at": "2026-03-02T11:13:34.118Z"
+      "drafted_at": "2026-03-02T12:13:55.310Z"
     }
   ]
 }

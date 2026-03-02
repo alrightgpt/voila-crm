@@ -1,0 +1,3 @@
+name,email,phone,company,role,notes
+"Test No Email","","503-555-9999","Test Company","independent","Should use phone as dedupe key"
+"Test Email & Phone","test@example.com","503-555-8888","Test Co","brokerage","Should use email (email takes priority)"
