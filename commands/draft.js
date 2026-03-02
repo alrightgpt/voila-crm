@@ -52,7 +52,7 @@ function savePipeline(pipeline) {
  * Load email template
  */
 function loadTemplate(templateVariant) {
-  const templatePath = path.join(__dirname, '../lib/templates', `${templateVariant}.md`);
+  const templatePath = path.join(__dirname, '../../../skills/voila/templates', `${templateVariant}.txt`);
 
   if (!fs.existsSync(templatePath)) {
     throw new Error(`Template not found: ${templateVariant}`);
@@ -63,17 +63,41 @@ function loadTemplate(templateVariant) {
 
 /**
  * Parse template to extract subject and body
+ * Format: First line "SUBJECT: <subject>", blank line, then body
  */
 function parseTemplate(content) {
-  let subject = '';
-  let body = content;
+  const lines = content.split('\n');
 
-  // Extract subject line
-  const subjectMatch = content.match(/^Subject:\s*(.+)$/m);
-  if (subjectMatch) {
-    subject = subjectMatch[1].trim();
-    body = content.replace(/^Subject:\s*.+$/m, '').trim();
+  if (lines.length < 2) {
+    throw new Error('Invalid template format: missing subject line or body');
   }
+
+  // Extract subject from first line (remove "SUBJECT: " prefix)
+  const subjectLine = lines[0].trim();
+  const subjectPrefix = 'SUBJECT:';
+
+  if (!subjectLine.toLowerCase().startsWith(subjectPrefix.toLowerCase())) {
+    throw new Error('Invalid template format: first line must start with "SUBJECT:"');
+  }
+
+  const subject = subjectLine.substring(subjectPrefix.length).trim();
+
+  // Body is everything after the first blank line
+  const bodyLines = [];
+  let foundBlank = false;
+
+  for (let i = 1; i < lines.length; i++) {
+    if (!foundBlank && lines[i].trim() === '') {
+      foundBlank = true;
+      continue;
+    }
+
+    if (foundBlank) {
+      bodyLines.push(lines[i]);
+    }
+  }
+
+  const body = bodyLines.join('\n').trim();
 
   return { subject, body };
 }
@@ -85,11 +109,14 @@ function personalizeTemplate(template, lead) {
   const raw = lead.raw_data || {};
   const enriched = lead.enriched_data || {};
 
+  // Normalize company name from multiple possible fields
+  const companyName = raw.company || raw.team_name || raw.brokerage || '';
+
   const replacements = {
     '{{name}}': raw.name || '',
     '{{first_name}}': raw.first_name || '',
-    '{{company}}': raw.company || '',
-    '{{company_name}}': raw.company || '',
+    '{{company}}': companyName,
+    '{{company_name}}': companyName,
     '{{email}}': raw.email || '',
     '{{role}}': raw.role || '',
     '{{market_focus}}': enriched.market_focus || '',
@@ -111,25 +138,28 @@ function personalizeTemplate(template, lead) {
 }
 
 /**
- * Select template based on lead role
+ * Select template based on lead role and team indicators
+ * Brokerage/team detection (case-insensitive):
+ *   - role contains "broker" OR
+ *   - brokerage field exists OR
+ *   - team_name exists
  */
 function selectTemplate(lead, forcedTemplate) {
   if (forcedTemplate) {
     return forcedTemplate;
   }
 
-  const role = (lead.raw_data || {}).role || 'unknown';
+  const raw = lead.raw_data || {};
+  const role = (raw.role || '').toLowerCase();
 
-  if (role === 'kw') {
-    return 'brokerage';
-  } else if (role === 'brokerage') {
-    return 'brokerage';
-  } else if (role === 'independent') {
-    return 'independent';
-  }
+  // Brokerage/team classification
+  const hasBrokerageRole = role.includes('broker');
+  const hasBrokerageField = !!raw.brokerage;
+  const hasTeamName = !!raw.team_name;
 
-  // Default to independent for unknown
-  return 'independent';
+  const isBrokerageTeam = hasBrokerageRole || hasBrokerageField || hasTeamName;
+
+  return isBrokerageTeam ? 'outreach_brokerage_v1' : 'outreach_independent_v1';
 }
 
 /**
@@ -139,6 +169,15 @@ function generateDraft(lead, templateVariant) {
   const template = loadTemplate(templateVariant);
   const { subject, body } = parseTemplate(template);
   const { text: personalizedBody, used } = personalizeTemplate(body, lead);
+
+  // Validate subject and body are present
+  if (!subject || subject.trim() === '') {
+    throw new Error('Template missing subject line');
+  }
+
+  if (!body || body.trim() === '') {
+    throw new Error('Template missing body text');
+  }
 
   const personalizedSubject = personalizeTemplate(subject, lead).text;
 
@@ -198,6 +237,7 @@ async function main() {
     for (const lead of readyLeads) {
       try {
         const templateVariant = selectTemplate(lead, args.template);
+        console.error(`DEBUG: Lead ${lead.raw_data.name}, template: ${templateVariant}`);
         const draft = generateDraft(lead, templateVariant);
 
         // Transition through READY_TO_DRAFT first, then DRAFTED
@@ -251,6 +291,7 @@ async function main() {
 
     const lead = pipeline.leads[leadIndex];
     const templateVariant = selectTemplate(lead, args.template);
+    console.error(`DEBUG: Lead ${lead.raw_data.name}, template: ${templateVariant}`);
     const draft = generateDraft(lead, templateVariant);
 
     // Transition through READY_TO_DRAFT first, then DRAFTED

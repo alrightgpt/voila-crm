@@ -1,28 +1,27 @@
 {
   "version": "1.0.0",
-  "last_updated": "2026-03-02T12:13:55.310Z",
+  "last_updated": "2026-03-02T13:01:02.875Z",
   "leads": [
     {
-      "id": "48e13ef2-6ccb-48cf-857e-a177624566b6",
+      "id": "62ea720d-379e-4584-89b9-0e4d3b0ff11d",
       "state": "DRAFTED",
-      "imported_at": "2026-03-02T12:02:54.922Z",
-      "updated_at": "2026-03-02T12:13:55.307Z",
+      "imported_at": "2026-03-02T13:00:47.491Z",
+      "updated_at": "2026-03-02T13:01:02.875Z",
       "raw_data": {
-        "name": "Sarah Chen",
-        "first_name": "Sarah",
-        "email": "sarah.chen@portlandrealty.com",
-        "phone": "503-555-0101",
-        "company": "Portland Realty Group",
+        "name": "Test Independent",
+        "first_name": "Test",
+        "email": "test@example.com",
+        "phone": "",
+        "company": "",
         "role": "independent",
-        "source_notes": "Hot lead - met at networking event",
-        "notes": "Hot lead - met at networking event"
+        "source_notes": "csv_import"
       },
-      "dedupe_key": "sarah.chen@portlandrealty.com",
+      "dedupe_key": "test@example.com",
       "validation_errors": [],
       "enriched_data": null,
       "draft": {
-        "subject": "Quick question about speed-to-lead for Portland Realty Group",
-        "body_text": "Hi Sarah,\n\nSaw you're running as an independent agent in Portland and wanted to reach out directly.\n\nI help real estate teams solve the speed-to-lead problem — getting inquiries routed and responded to instantly, with first follow-ups drafted automatically.\n\nNo setup headaches. I build the system around how you already work.\n\nIf this is on your radar, happy to hop on a quick call to walk through what it looks like. No pressure.\n\nBest,\nAustin\n\nP.S. First 30 days of monitoring and optimization are included.",
+        "subject": "Quick question about speed-to-lead for {{company_name}}",
+        "body_text": "Hey Test,\n\nI was looking at {{company_name}} - your site is clean and clearly built to convert.\n\nQuick question: when a new inquiry comes in, how fast does someone actually respond?\n\nMost small teams think they're quick… until they measure it.\n\nAt Voilà, we install systems that respond instantly, route the lead correctly, and draft the first follow-up automatically.\n\nIf improving speed-to-lead would increase your close rate, I'd be happy to map this for your team.\n\n—\nAustin Lepari\nFounder, Voilà\nvoila.fit",
         "personalization_used": [
           "{{first_name}}"
         ],
@@ -33,179 +32,15 @@
         {
           "from": "IMPORTED",
           "to": "READY_TO_DRAFT",
-          "timestamp": "2026-03-02T12:13:55.307Z"
+          "timestamp": "2026-03-02T13:01:02.875Z"
         },
         {
           "from": "READY_TO_DRAFT",
           "to": "DRAFTED",
-          "timestamp": "2026-03-02T12:13:55.307Z"
+          "timestamp": "2026-03-02T13:01:02.875Z"
         }
       ],
-      "drafted_at": "2026-03-02T12:13:55.307Z"
-    },
-    {
-      "id": "da7e6623-8fd8-4447-ac51-4a927469d3cc",
-      "state": "DRAFTED",
-      "imported_at": "2026-03-02T12:02:54.922Z",
-      "updated_at": "2026-03-02T12:13:55.308Z",
-      "raw_data": {
-        "name": "Marcus Johnson",
-        "first_name": "Marcus",
-        "email": "marcus.j@kwportland.com",
-        "phone": "503-555-0102",
-        "company": "Keller Williams Portland",
-        "role": "kw",
-        "source_notes": "Brokerage team of 5 agents",
-        "notes": "Brokerage team of 5 agents"
-      },
-      "dedupe_key": "marcus.j@kwportland.com",
-      "validation_errors": [],
-      "enriched_data": null,
-      "draft": {
-        "subject": "Speed-to-lead system for Keller Williams Portland",
-        "body_text": "Hi Marcus,\n\nQuick question: How fast are your agents responding to new inquiries?\n\nI work with real estate teams to automate that first touch — instant responses, proper routing, and drafted follow-ups that you can customize.\n\nThe install takes 2-5 business days. First 30 days of monitoring included.\n\nIf this sounds like something you've been thinking about, I'd love to share a quick overview. No sales pitch.\n\nBest,\nAustin",
-        "personalization_used": [
-          "{{first_name}}"
-        ],
-        "confidence_score": 0.8
-      },
-      "send_status": null,
-      "history": [
-        {
-          "from": "IMPORTED",
-          "to": "READY_TO_DRAFT",
-          "timestamp": "2026-03-02T12:13:55.308Z"
-        },
-        {
-          "from": "READY_TO_DRAFT",
-          "to": "DRAFTED",
-          "timestamp": "2026-03-02T12:13:55.308Z"
-        }
-      ],
-      "drafted_at": "2026-03-02T12:13:55.308Z"
-    },
-    {
-      "id": "8fb55087-22b0-4252-bcd7-94ef0697332d",
-      "state": "DRAFTED",
-      "imported_at": "2026-03-02T12:02:54.922Z",
-      "updated_at": "2026-03-02T12:13:55.308Z",
-      "raw_data": {
-        "name": "Elena Rodriguez",
-        "first_name": "Elena",
-        "email": "elena@elevatepdx.com",
-        "phone": "503-555-0103",
-        "company": "Elevate Real Estate",
-        "role": "brokerage",
-        "source_notes": "Specializes in first-time buyers",
-        "notes": "Specializes in first-time buyers"
-      },
-      "dedupe_key": "elena@elevatepdx.com",
-      "validation_errors": [],
-      "enriched_data": null,
-      "draft": {
-        "subject": "Speed-to-lead system for Elevate Real Estate",
-        "body_text": "Hi Elena,\n\nQuick question: How fast are your agents responding to new inquiries?\n\nI work with real estate teams to automate that first touch — instant responses, proper routing, and drafted follow-ups that you can customize.\n\nThe install takes 2-5 business days. First 30 days of monitoring included.\n\nIf this sounds like something you've been thinking about, I'd love to share a quick overview. No sales pitch.\n\nBest,\nAustin",
-        "personalization_used": [
-          "{{first_name}}"
-        ],
-        "confidence_score": 0.8
-      },
-      "send_status": null,
-      "history": [
-        {
-          "from": "IMPORTED",
-          "to": "READY_TO_DRAFT",
-          "timestamp": "2026-03-02T12:13:55.308Z"
-        },
-        {
-          "from": "READY_TO_DRAFT",
-          "to": "DRAFTED",
-          "timestamp": "2026-03-02T12:13:55.308Z"
-        }
-      ],
-      "drafted_at": "2026-03-02T12:13:55.308Z"
-    },
-    {
-      "id": "72ebae9c-66bc-4244-914d-411998c709c0",
-      "state": "DRAFTED",
-      "imported_at": "2026-03-02T12:02:54.922Z",
-      "updated_at": "2026-03-02T12:13:55.308Z",
-      "raw_data": {
-        "name": "David Park",
-        "first_name": "David",
-        "email": "david.park@independent.com",
-        "phone": "503-555-0104",
-        "company": "David Park Realty",
-        "role": "independent",
-        "source_notes": "2-agent team",
-        "notes": "2-agent team"
-      },
-      "dedupe_key": "david.park@independent.com",
-      "validation_errors": [],
-      "enriched_data": null,
-      "draft": {
-        "subject": "Quick question about speed-to-lead for David Park Realty",
-        "body_text": "Hi David,\n\nSaw you're running as an independent agent in Portland and wanted to reach out directly.\n\nI help real estate teams solve the speed-to-lead problem — getting inquiries routed and responded to instantly, with first follow-ups drafted automatically.\n\nNo setup headaches. I build the system around how you already work.\n\nIf this is on your radar, happy to hop on a quick call to walk through what it looks like. No pressure.\n\nBest,\nAustin\n\nP.S. First 30 days of monitoring and optimization are included.",
-        "personalization_used": [
-          "{{first_name}}"
-        ],
-        "confidence_score": 0.8
-      },
-      "send_status": null,
-      "history": [
-        {
-          "from": "IMPORTED",
-          "to": "READY_TO_DRAFT",
-          "timestamp": "2026-03-02T12:13:55.308Z"
-        },
-        {
-          "from": "READY_TO_DRAFT",
-          "to": "DRAFTED",
-          "timestamp": "2026-03-02T12:13:55.308Z"
-        }
-      ],
-      "drafted_at": "2026-03-02T12:13:55.308Z"
-    },
-    {
-      "id": "c2318cb7-c195-40c0-9821-d857db67f8cc",
-      "state": "DRAFTED",
-      "imported_at": "2026-03-02T12:02:54.922Z",
-      "updated_at": "2026-03-02T12:13:55.310Z",
-      "raw_data": {
-        "name": "Jennifer Walsh",
-        "first_name": "Jennifer",
-        "email": "jwalsh@remaxportland.com",
-        "phone": "503-555-0105",
-        "company": "RE/MAX Portland",
-        "role": "brokerage",
-        "source_notes": "Large team - 8 agents",
-        "notes": "Large team - 8 agents"
-      },
-      "dedupe_key": "jwalsh@remaxportland.com",
-      "validation_errors": [],
-      "enriched_data": null,
-      "draft": {
-        "subject": "Speed-to-lead system for RE/MAX Portland",
-        "body_text": "Hi Jennifer,\n\nQuick question: How fast are your agents responding to new inquiries?\n\nI work with real estate teams to automate that first touch — instant responses, proper routing, and drafted follow-ups that you can customize.\n\nThe install takes 2-5 business days. First 30 days of monitoring included.\n\nIf this sounds like something you've been thinking about, I'd love to share a quick overview. No sales pitch.\n\nBest,\nAustin",
-        "personalization_used": [
-          "{{first_name}}"
-        ],
-        "confidence_score": 0.8
-      },
-      "send_status": null,
-      "history": [
-        {
-          "from": "IMPORTED",
-          "to": "READY_TO_DRAFT",
-          "timestamp": "2026-03-02T12:13:55.310Z"
-        },
-        {
-          "from": "READY_TO_DRAFT",
-          "to": "DRAFTED",
-          "timestamp": "2026-03-02T12:13:55.310Z"
-        }
-      ],
-      "drafted_at": "2026-03-02T12:13:55.310Z"
+      "drafted_at": "2026-03-02T13:01:02.875Z"
     }
   ]
 }
