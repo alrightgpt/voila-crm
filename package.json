@@ -1,0 +1,9 @@
+{
+  "name": "voila-outreach",
+  "version": "1.0.0",
+  "description": "Voilà Outreach Automation Pipeline",
+  "main": "lib/state-machine.js",
+  "dependencies": {
+    "nodemailer": "^6.9.13"
+  }
+}

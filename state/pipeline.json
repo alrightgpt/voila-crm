@@ -1,0 +1,271 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-03-02T10:00:02.178Z",
+  "leads": [
+    {
+      "id": "b3ca33fc-0f80-4f16-944c-6f54d18b0ece",
+      "state": "SIMULATED",
+      "imported_at": "2026-03-02T10:00:02.100Z",
+      "updated_at": "2026-03-02T10:00:02.177Z",
+      "raw_data": {
+        "name": "Sarah Chen",
+        "first_name": "Sarah",
+        "email": "sarah.chen@portlandrealty.com",
+        "phone": "503-555-0101",
+        "company": "Portland Realty Group",
+        "role": "independent",
+        "source_notes": "Hot lead - met at networking event",
+        "notes": "Hot lead - met at networking event"
+      },
+      "validation_errors": [],
+      "enriched_data": null,
+      "draft": {
+        "subject": "Quick question about speed-to-lead for Portland Realty Group",
+        "body_text": "Hi Sarah,\n\nSaw you're running as an independent agent in Portland and wanted to reach out directly.\n\nI help real estate teams solve the speed-to-lead problem — getting inquiries routed and responded to instantly, with first follow-ups drafted automatically.\n\nNo setup headaches. I build the system around how you already work.\n\nIf this is on your radar, happy to hop on a quick call to walk through what it looks like. No pressure.\n\nBest,\nAustin\n\nP.S. First 30 days of monitoring and optimization are included.",
+        "personalization_used": [
+          "{{first_name}}"
+        ],
+        "confidence_score": 0.8
+      },
+      "send_status": {
+        "processed_at": "2026-03-02T10:00:02.177Z"
+      },
+      "history": [
+        {
+          "from": "IMPORTED",
+          "to": "READY_TO_DRAFT",
+          "timestamp": "2026-03-02T10:00:02.126Z"
+        },
+        {
+          "from": "READY_TO_DRAFT",
+          "to": "DRAFTED",
+          "timestamp": "2026-03-02T10:00:02.126Z"
+        },
+        {
+          "from": "DRAFTED",
+          "to": "PENDING_SEND",
+          "timestamp": "2026-03-02T10:00:02.177Z"
+        },
+        {
+          "from": "PENDING_SEND",
+          "to": "SIMULATED",
+          "timestamp": "2026-03-02T10:00:02.177Z",
+          "processed_at": "2026-03-02T10:00:02.177Z"
+        }
+      ],
+      "drafted_at": "2026-03-02T10:00:02.126Z"
+    },
+    {
+      "id": "11a32f9d-2eea-4a99-91a5-a8f2e01c282e",
+      "state": "SIMULATED",
+      "imported_at": "2026-03-02T10:00:02.100Z",
+      "updated_at": "2026-03-02T10:00:02.177Z",
+      "raw_data": {
+        "name": "Marcus Johnson",
+        "first_name": "Marcus",
+        "email": "marcus.j@kwportland.com",
+        "phone": "503-555-0102",
+        "company": "Keller Williams Portland",
+        "role": "kw",
+        "source_notes": "Brokerage team of 5 agents",
+        "notes": "Brokerage team of 5 agents"
+      },
+      "validation_errors": [],
+      "enriched_data": null,
+      "draft": {
+        "subject": "Speed-to-lead system for Keller Williams Portland",
+        "body_text": "Hi Marcus,\n\nQuick question: How fast are your agents responding to new inquiries?\n\nI work with real estate teams to automate that first touch — instant responses, proper routing, and drafted follow-ups that you can customize.\n\nThe install takes 2-5 business days. First 30 days of monitoring included.\n\nIf this sounds like something you've been thinking about, I'd love to share a quick overview. No sales pitch.\n\nBest,\nAustin",
+        "personalization_used": [
+          "{{first_name}}"
+        ],
+        "confidence_score": 0.8
+      },
+      "send_status": {
+        "processed_at": "2026-03-02T10:00:02.177Z"
+      },
+      "history": [
+        {
+          "from": "IMPORTED",
+          "to": "READY_TO_DRAFT",
+          "timestamp": "2026-03-02T10:00:02.126Z"
+        },
+        {
+          "from": "READY_TO_DRAFT",
+          "to": "DRAFTED",
+          "timestamp": "2026-03-02T10:00:02.126Z"
+        },
+        {
+          "from": "DRAFTED",
+          "to": "PENDING_SEND",
+          "timestamp": "2026-03-02T10:00:02.177Z"
+        },
+        {
+          "from": "PENDING_SEND",
+          "to": "SIMULATED",
+          "timestamp": "2026-03-02T10:00:02.177Z",
+          "processed_at": "2026-03-02T10:00:02.177Z"
+        }
+      ],
+      "drafted_at": "2026-03-02T10:00:02.126Z"
+    },
+    {
+      "id": "7c6f71b7-db5a-464b-907d-c9a073d8da6f",
+      "state": "SIMULATED",
+      "imported_at": "2026-03-02T10:00:02.100Z",
+      "updated_at": "2026-03-02T10:00:02.178Z",
+      "raw_data": {
+        "name": "Elena Rodriguez",
+        "first_name": "Elena",
+        "email": "elena@elevatepdx.com",
+        "phone": "503-555-0103",
+        "company": "Elevate Real Estate",
+        "role": "brokerage",
+        "source_notes": "Specializes in first-time buyers",
+        "notes": "Specializes in first-time buyers"
+      },
+      "validation_errors": [],
+      "enriched_data": null,
+      "draft": {
+        "subject": "Speed-to-lead system for Elevate Real Estate",
+        "body_text": "Hi Elena,\n\nQuick question: How fast are your agents responding to new inquiries?\n\nI work with real estate teams to automate that first touch — instant responses, proper routing, and drafted follow-ups that you can customize.\n\nThe install takes 2-5 business days. First 30 days of monitoring included.\n\nIf this sounds like something you've been thinking about, I'd love to share a quick overview. No sales pitch.\n\nBest,\nAustin",
+        "personalization_used": [
+          "{{first_name}}"
+        ],
+        "confidence_score": 0.8
+      },
+      "send_status": {
+        "processed_at": "2026-03-02T10:00:02.178Z"
+      },
+      "history": [
+        {
+          "from": "IMPORTED",
+          "to": "READY_TO_DRAFT",
+          "timestamp": "2026-03-02T10:00:02.126Z"
+        },
+        {
+          "from": "READY_TO_DRAFT",
+          "to": "DRAFTED",
+          "timestamp": "2026-03-02T10:00:02.126Z"
+        },
+        {
+          "from": "DRAFTED",
+          "to": "PENDING_SEND",
+          "timestamp": "2026-03-02T10:00:02.177Z"
+        },
+        {
+          "from": "PENDING_SEND",
+          "to": "SIMULATED",
+          "timestamp": "2026-03-02T10:00:02.178Z",
+          "processed_at": "2026-03-02T10:00:02.177Z"
+        }
+      ],
+      "drafted_at": "2026-03-02T10:00:02.126Z"
+    },
+    {
+      "id": "6ac7e7b4-6534-4da9-ba0b-a7d7f64b2382",
+      "state": "SIMULATED",
+      "imported_at": "2026-03-02T10:00:02.100Z",
+      "updated_at": "2026-03-02T10:00:02.178Z",
+      "raw_data": {
+        "name": "David Park",
+        "first_name": "David",
+        "email": "david.park@independent.com",
+        "phone": "503-555-0104",
+        "company": "David Park Realty",
+        "role": "independent",
+        "source_notes": "2-agent team",
+        "notes": "2-agent team"
+      },
+      "validation_errors": [],
+      "enriched_data": null,
+      "draft": {
+        "subject": "Quick question about speed-to-lead for David Park Realty",
+        "body_text": "Hi David,\n\nSaw you're running as an independent agent in Portland and wanted to reach out directly.\n\nI help real estate teams solve the speed-to-lead problem — getting inquiries routed and responded to instantly, with first follow-ups drafted automatically.\n\nNo setup headaches. I build the system around how you already work.\n\nIf this is on your radar, happy to hop on a quick call to walk through what it looks like. No pressure.\n\nBest,\nAustin\n\nP.S. First 30 days of monitoring and optimization are included.",
+        "personalization_used": [
+          "{{first_name}}"
+        ],
+        "confidence_score": 0.8
+      },
+      "send_status": {
+        "processed_at": "2026-03-02T10:00:02.178Z"
+      },
+      "history": [
+        {
+          "from": "IMPORTED",
+          "to": "READY_TO_DRAFT",
+          "timestamp": "2026-03-02T10:00:02.127Z"
+        },
+        {
+          "from": "READY_TO_DRAFT",
+          "to": "DRAFTED",
+          "timestamp": "2026-03-02T10:00:02.127Z"
+        },
+        {
+          "from": "DRAFTED",
+          "to": "PENDING_SEND",
+          "timestamp": "2026-03-02T10:00:02.178Z"
+        },
+        {
+          "from": "PENDING_SEND",
+          "to": "SIMULATED",
+          "timestamp": "2026-03-02T10:00:02.178Z",
+          "processed_at": "2026-03-02T10:00:02.178Z"
+        }
+      ],
+      "drafted_at": "2026-03-02T10:00:02.127Z"
+    },
+    {
+      "id": "fec1bacc-09a8-420e-bda1-6181b4f57499",
+      "state": "SIMULATED",
+      "imported_at": "2026-03-02T10:00:02.100Z",
+      "updated_at": "2026-03-02T10:00:02.178Z",
+      "raw_data": {
+        "name": "Jennifer Walsh",
+        "first_name": "Jennifer",
+        "email": "jwalsh@remaxportland.com",
+        "phone": "503-555-0105",
+        "company": "RE/MAX Portland",
+        "role": "brokerage",
+        "source_notes": "Large team - 8 agents",
+        "notes": "Large team - 8 agents"
+      },
+      "validation_errors": [],
+      "enriched_data": null,
+      "draft": {
+        "subject": "Speed-to-lead system for RE/MAX Portland",
+        "body_text": "Hi Jennifer,\n\nQuick question: How fast are your agents responding to new inquiries?\n\nI work with real estate teams to automate that first touch — instant responses, proper routing, and drafted follow-ups that you can customize.\n\nThe install takes 2-5 business days. First 30 days of monitoring included.\n\nIf this sounds like something you've been thinking about, I'd love to share a quick overview. No sales pitch.\n\nBest,\nAustin",
+        "personalization_used": [
+          "{{first_name}}"
+        ],
+        "confidence_score": 0.8
+      },
+      "send_status": {
+        "processed_at": "2026-03-02T10:00:02.178Z"
+      },
+      "history": [
+        {
+          "from": "IMPORTED",
+          "to": "READY_TO_DRAFT",
+          "timestamp": "2026-03-02T10:00:02.127Z"
+        },
+        {
+          "from": "READY_TO_DRAFT",
+          "to": "DRAFTED",
+          "timestamp": "2026-03-02T10:00:02.127Z"
+        },
+        {
+          "from": "DRAFTED",
+          "to": "PENDING_SEND",
+          "timestamp": "2026-03-02T10:00:02.178Z"
+        },
+        {
+          "from": "PENDING_SEND",
+          "to": "SIMULATED",
+          "timestamp": "2026-03-02T10:00:02.178Z",
+          "processed_at": "2026-03-02T10:00:02.178Z"
+        }
+      ],
+      "drafted_at": "2026-03-02T10:00:02.127Z"
+    }
+  ]
+}

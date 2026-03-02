@@ -1,0 +1,12 @@
+{
+  "send_enabled": false,
+  "simulation_mode": true,
+  "smtp_config": {
+    "host": "process.env.VOILA_SMTP_HOST",
+    "port": "process.env.VOILA_SMTP_PORT",
+    "user": "process.env.VOILA_SMTP_USER",
+    "pass": "process.env.VOILA_SMTP_PASS",
+    "from_name": "process.env.VOILA_FROM_NAME",
+    "from_email": "process.env.VOILA_FROM_EMAIL"
+  }
+}
