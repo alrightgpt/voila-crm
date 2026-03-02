@@ -1,12 +1,12 @@
 {
   "version": "1.0.0",
-  "last_updated": "2026-03-02T10:00:02.178Z",
+  "last_updated": "2026-03-02T11:13:37.448Z",
   "leads": [
     {
-      "id": "b3ca33fc-0f80-4f16-944c-6f54d18b0ece",
+      "id": "b99db113-1cf6-4695-be09-6b354e40a26c",
       "state": "SIMULATED",
-      "imported_at": "2026-03-02T10:00:02.100Z",
-      "updated_at": "2026-03-02T10:00:02.177Z",
+      "imported_at": "2026-03-02T11:13:34.093Z",
+      "updated_at": "2026-03-02T11:13:37.448Z",
       "raw_data": {
         "name": "Sarah Chen",
         "first_name": "Sarah",
@@ -28,38 +28,38 @@
         "confidence_score": 0.8
       },
       "send_status": {
-        "processed_at": "2026-03-02T10:00:02.177Z"
+        "processed_at": "2026-03-02T11:13:37.448Z"
       },
       "history": [
         {
           "from": "IMPORTED",
           "to": "READY_TO_DRAFT",
-          "timestamp": "2026-03-02T10:00:02.126Z"
+          "timestamp": "2026-03-02T11:13:34.117Z"
         },
         {
           "from": "READY_TO_DRAFT",
           "to": "DRAFTED",
-          "timestamp": "2026-03-02T10:00:02.126Z"
+          "timestamp": "2026-03-02T11:13:34.117Z"
         },
         {
           "from": "DRAFTED",
           "to": "PENDING_SEND",
-          "timestamp": "2026-03-02T10:00:02.177Z"
+          "timestamp": "2026-03-02T11:13:34.139Z"
         },
         {
           "from": "PENDING_SEND",
           "to": "SIMULATED",
-          "timestamp": "2026-03-02T10:00:02.177Z",
-          "processed_at": "2026-03-02T10:00:02.177Z"
+          "timestamp": "2026-03-02T11:13:37.448Z",
+          "processed_at": "2026-03-02T11:13:37.448Z"
         }
       ],
-      "drafted_at": "2026-03-02T10:00:02.126Z"
+      "drafted_at": "2026-03-02T11:13:34.117Z"
     },
     {
-      "id": "11a32f9d-2eea-4a99-91a5-a8f2e01c282e",
-      "state": "SIMULATED",
-      "imported_at": "2026-03-02T10:00:02.100Z",
-      "updated_at": "2026-03-02T10:00:02.177Z",
+      "id": "ea18740e-dbed-4b45-b215-3273de0e8b53",
+      "state": "DRAFTED",
+      "imported_at": "2026-03-02T11:13:34.093Z",
+      "updated_at": "2026-03-02T11:13:34.117Z",
       "raw_data": {
         "name": "Marcus Johnson",
         "first_name": "Marcus",
@@ -80,39 +80,26 @@
         ],
         "confidence_score": 0.8
       },
-      "send_status": {
-        "processed_at": "2026-03-02T10:00:02.177Z"
-      },
+      "send_status": null,
       "history": [
         {
           "from": "IMPORTED",
           "to": "READY_TO_DRAFT",
-          "timestamp": "2026-03-02T10:00:02.126Z"
+          "timestamp": "2026-03-02T11:13:34.117Z"
         },
         {
           "from": "READY_TO_DRAFT",
           "to": "DRAFTED",
-          "timestamp": "2026-03-02T10:00:02.126Z"
-        },
-        {
-          "from": "DRAFTED",
-          "to": "PENDING_SEND",
-          "timestamp": "2026-03-02T10:00:02.177Z"
-        },
-        {
-          "from": "PENDING_SEND",
-          "to": "SIMULATED",
-          "timestamp": "2026-03-02T10:00:02.177Z",
-          "processed_at": "2026-03-02T10:00:02.177Z"
+          "timestamp": "2026-03-02T11:13:34.117Z"
         }
       ],
-      "drafted_at": "2026-03-02T10:00:02.126Z"
+      "drafted_at": "2026-03-02T11:13:34.117Z"
     },
     {
-      "id": "7c6f71b7-db5a-464b-907d-c9a073d8da6f",
-      "state": "SIMULATED",
-      "imported_at": "2026-03-02T10:00:02.100Z",
-      "updated_at": "2026-03-02T10:00:02.178Z",
+      "id": "50351563-1eb1-43c4-9e0f-6627c7a31b89",
+      "state": "DRAFTED",
+      "imported_at": "2026-03-02T11:13:34.093Z",
+      "updated_at": "2026-03-02T11:13:34.117Z",
       "raw_data": {
         "name": "Elena Rodriguez",
         "first_name": "Elena",
@@ -133,39 +120,26 @@
         ],
         "confidence_score": 0.8
       },
-      "send_status": {
-        "processed_at": "2026-03-02T10:00:02.178Z"
-      },
+      "send_status": null,
       "history": [
         {
           "from": "IMPORTED",
           "to": "READY_TO_DRAFT",
-          "timestamp": "2026-03-02T10:00:02.126Z"
+          "timestamp": "2026-03-02T11:13:34.117Z"
         },
         {
           "from": "READY_TO_DRAFT",
           "to": "DRAFTED",
-          "timestamp": "2026-03-02T10:00:02.126Z"
-        },
-        {
-          "from": "DRAFTED",
-          "to": "PENDING_SEND",
-          "timestamp": "2026-03-02T10:00:02.177Z"
-        },
-        {
-          "from": "PENDING_SEND",
-          "to": "SIMULATED",
-          "timestamp": "2026-03-02T10:00:02.178Z",
-          "processed_at": "2026-03-02T10:00:02.177Z"
+          "timestamp": "2026-03-02T11:13:34.117Z"
         }
       ],
-      "drafted_at": "2026-03-02T10:00:02.126Z"
+      "drafted_at": "2026-03-02T11:13:34.117Z"
     },
     {
-      "id": "6ac7e7b4-6534-4da9-ba0b-a7d7f64b2382",
-      "state": "SIMULATED",
-      "imported_at": "2026-03-02T10:00:02.100Z",
-      "updated_at": "2026-03-02T10:00:02.178Z",
+      "id": "cc38eef3-040e-47f5-8984-1e3553256608",
+      "state": "DRAFTED",
+      "imported_at": "2026-03-02T11:13:34.093Z",
+      "updated_at": "2026-03-02T11:13:34.118Z",
       "raw_data": {
         "name": "David Park",
         "first_name": "David",
@@ -186,39 +160,26 @@
         ],
         "confidence_score": 0.8
       },
-      "send_status": {
-        "processed_at": "2026-03-02T10:00:02.178Z"
-      },
+      "send_status": null,
       "history": [
         {
           "from": "IMPORTED",
           "to": "READY_TO_DRAFT",
-          "timestamp": "2026-03-02T10:00:02.127Z"
+          "timestamp": "2026-03-02T11:13:34.118Z"
         },
         {
           "from": "READY_TO_DRAFT",
           "to": "DRAFTED",
-          "timestamp": "2026-03-02T10:00:02.127Z"
-        },
-        {
-          "from": "DRAFTED",
-          "to": "PENDING_SEND",
-          "timestamp": "2026-03-02T10:00:02.178Z"
-        },
-        {
-          "from": "PENDING_SEND",
-          "to": "SIMULATED",
-          "timestamp": "2026-03-02T10:00:02.178Z",
-          "processed_at": "2026-03-02T10:00:02.178Z"
+          "timestamp": "2026-03-02T11:13:34.118Z"
         }
       ],
-      "drafted_at": "2026-03-02T10:00:02.127Z"
+      "drafted_at": "2026-03-02T11:13:34.118Z"
     },
     {
-      "id": "fec1bacc-09a8-420e-bda1-6181b4f57499",
-      "state": "SIMULATED",
-      "imported_at": "2026-03-02T10:00:02.100Z",
-      "updated_at": "2026-03-02T10:00:02.178Z",
+      "id": "bebae8fe-091a-4252-85f0-35c3b37e3359",
+      "state": "DRAFTED",
+      "imported_at": "2026-03-02T11:13:34.093Z",
+      "updated_at": "2026-03-02T11:13:34.118Z",
       "raw_data": {
         "name": "Jennifer Walsh",
         "first_name": "Jennifer",
@@ -239,33 +200,20 @@
         ],
         "confidence_score": 0.8
       },
-      "send_status": {
-        "processed_at": "2026-03-02T10:00:02.178Z"
-      },
+      "send_status": null,
       "history": [
         {
           "from": "IMPORTED",
           "to": "READY_TO_DRAFT",
-          "timestamp": "2026-03-02T10:00:02.127Z"
+          "timestamp": "2026-03-02T11:13:34.118Z"
         },
         {
           "from": "READY_TO_DRAFT",
           "to": "DRAFTED",
-          "timestamp": "2026-03-02T10:00:02.127Z"
-        },
-        {
-          "from": "DRAFTED",
-          "to": "PENDING_SEND",
-          "timestamp": "2026-03-02T10:00:02.178Z"
-        },
-        {
-          "from": "PENDING_SEND",
-          "to": "SIMULATED",
-          "timestamp": "2026-03-02T10:00:02.178Z",
-          "processed_at": "2026-03-02T10:00:02.178Z"
+          "timestamp": "2026-03-02T11:13:34.118Z"
         }
       ],
-      "drafted_at": "2026-03-02T10:00:02.127Z"
+      "drafted_at": "2026-03-02T11:13:34.118Z"
     }
   ]
 }

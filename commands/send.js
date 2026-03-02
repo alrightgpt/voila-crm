@@ -243,16 +243,16 @@ async function main() {
   console.error(`Dry run: ${args.dryRun}`);
 
   if (args.all) {
-    console.error('Processing all leads in PENDING_SEND or DRAFTED state...');
+    console.error('Processing all leads in PENDING_SEND state...');
 
     const readyLeads = pipeline.leads.filter(l =>
-      l.state === 'PENDING_SEND' || l.state === 'DRAFTED'
+      l.state === 'PENDING_SEND'
     );
 
     if (readyLeads.length === 0) {
       console.error('No leads ready to send.');
       console.log(JSON.stringify({
-        message: 'No leads ready to send',
+        message: 'No leads ready to send. Use voila/draft --all to create drafts, then manually approve leads.',
         processed: 0
       }));
       process.exit(0);
@@ -260,15 +260,7 @@ async function main() {
 
     for (const lead of readyLeads) {
       try {
-        // First transition DRAFTED -> PENDING_SEND if needed
-        let workingLead = lead;
-        if (workingLead.state === 'DRAFTED' && !args.dryRun) {
-          const index = pipeline.leads.findIndex(l => l.id === lead.id);
-          workingLead = transition(workingLead, 'PENDING_SEND');
-          pipeline.leads[index] = workingLead;
-        }
-
-        const result = await processLead(workingLead, args.mode, config, args.dryRun);
+        const result = await processLead(lead, args.mode, config, args.dryRun);
         results.push(result);
 
         // Update pipeline if not dry run
@@ -346,19 +338,23 @@ async function main() {
 
     const lead = pipeline.leads[leadIndex];
 
-    // First transition DRAFTED -> PENDING_SEND if needed
-    let workingLead = lead;
-    if (workingLead.state === 'DRAFTED' && !args.dryRun) {
-      workingLead = transition(workingLead, 'PENDING_SEND');
-      pipeline.leads[leadIndex] = workingLead;
+    // Block DRAFTED leads - require explicit approval
+    if (lead.state === 'DRAFTED') {
+      console.error(`✗ Lead is in DRAFTED state and requires explicit approval.`);
+      console.log(JSON.stringify({
+        lead_id: args.leadId,
+        state: 'BLOCKED',
+        error: 'Lead is in DRAFTED state. Use voila/draft to review drafts, then explicitly approve leads before sending. To approve, transition lead to PENDING_SEND manually or use a dedicated approve command.'
+      }));
+      process.exit(1);
     }
 
-    const result = await processLead(workingLead, args.mode, config, args.dryRun);
+    const result = await processLead(lead, args.mode, config, args.dryRun);
 
     // Update pipeline if not dry run
     if (!args.dryRun) {
       if (result.state === 'SENT' || result.state === 'SIMULATED') {
-        const transitioned = transition(workingLead, result.state, {
+        const transitioned = transition(lead, result.state, {
           processed_at: new Date().toISOString()
         });
         transitioned.send_status = {
@@ -367,7 +363,7 @@ async function main() {
         };
         pipeline.leads[leadIndex] = transitioned;
       } else if (result.state === 'FAILED') {
-        const transitioned = transition(workingLead, 'FAILED', {
+        const transitioned = transition(lead, 'FAILED', {
           error: result.error
         });
         pipeline.leads[leadIndex] = transitioned;
