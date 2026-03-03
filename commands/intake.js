@@ -22,6 +22,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { parseCSV, normalizeLead, generateUUID } = require(path.join(__dirname, '../lib/csv-client.js'));
 const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
+const { fail } = require(path.join(__dirname, '../lib/errors.js'));
 
 // Pipeline state file
 const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
@@ -129,34 +130,28 @@ function parseArgs() {
       try {
         result.manualLead = JSON.parse(args[i + 1]);
       } catch (e) {
-        console.error(JSON.stringify({
-          error: 'Invalid JSON for manual lead',
+        fail('INVALID_ARGS', 'Invalid JSON for manual lead', {
           example: '{"name":"John Doe","email":"john@example.com","company":"Acme Realty","role":"independent"}'
-        }));
-        process.exit(1);
+        });
       }
       i++;
     }
   }
 
   if (!result.source) {
-    console.error(JSON.stringify({
-      error: 'Missing required arguments',
+    fail('INVALID_ARGS', 'Missing required arguments: --csv <path> or --manual <json>', {
       usage: 'voila/intake --csv <path> OR voila/intake --manual <json>',
       examples: [
         'voila/intake --csv /path/to/leads.csv',
         'voila/intake --manual \'{"name":"John Doe","email":"john@example.com","company":"Acme Realty","role":"independent"}\''
       ]
-    }));
-    process.exit(1);
+    });
   }
 
   return result;
 }
 
 async function main() {
-  console.error('Voilà: Importing leads...');
-
   const pipeline = loadPipeline();
   const args = parseArgs();
   const imported = [];
@@ -164,10 +159,11 @@ async function main() {
   const invalidRows = [];
 
   if (args.source === 'csv') {
-    console.error(`Importing from CSV: ${args.csvPath}`);
-
     try {
       const leads = parseCSV(args.csvPath);
+
+      console.error('Voilà: Importing leads...');
+      console.error(`Importing from CSV: ${args.csvPath}`);
 
       for (const lead of leads) {
         // Check for duplicate
@@ -227,15 +223,13 @@ async function main() {
       }, null, 2));
 
     } catch (error) {
-      console.error(`✗ Import failed: ${error.message}`);
-      console.log(JSON.stringify({
-        error: error.message,
+      fail('INTAKE_PARSE_FAILED', error.message, {
         imported: 0
-      }));
-      process.exit(1);
+      });
     }
 
   } else if (args.source === 'manual') {
+    console.error('Voilà: Importing leads...');
     console.error('Importing manual lead...');
 
     try {
@@ -244,12 +238,9 @@ async function main() {
       // Check for duplicate
       const dedupeKey = generateDedupeKey(normalizedLead);
       if (isDuplicate(pipeline, dedupeKey)) {
-        console.error(`✗ Duplicate lead: ${normalizedLead.name} (${normalizedLead.email})`);
-        console.log(JSON.stringify({
-          error: 'Duplicate lead',
+        fail('DUPLICATE_LEAD', 'Duplicate lead detected', {
           lead_email: normalizedLead.email
-        }));
-        process.exit(1);
+        });
       }
 
       const importedLead = importLead(pipeline, normalizedLead);
@@ -266,11 +257,7 @@ async function main() {
       }), null, 2);
 
     } catch (error) {
-      console.error(`✗ Import failed: ${error.message}`);
-      console.log(JSON.stringify({
-        error: error.message
-      }));
-      process.exit(1);
+      fail('UNEXPECTED_ERROR', error.message, null);
     }
   }
 
@@ -278,8 +265,5 @@ async function main() {
 }
 
 main().catch(error => {
-  console.error(JSON.stringify({
-    error: error.message
-  }));
-  process.exit(1);
+  fail('UNEXPECTED_ERROR', error.message, null);
 });

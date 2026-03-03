@@ -26,6 +26,7 @@
 const fs = require('fs');
 const path = require('path');
 const { transition, getNextStates } = require(path.join(__dirname, '../lib/state-machine.js'));
+const { fail } = require(path.join(__dirname, '../lib/errors.js'));
 
 // Pipeline state file
 const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
@@ -378,13 +379,12 @@ function parseArgs() {
 }
 
 async function main() {
-  console.error('Voilà: Generating email drafts...');
-
   const pipeline = loadPipeline();
   const args = parseArgs();
   const results = [];
 
   if (args.all) {
+    console.error('Voilà: Generating email drafts...');
     console.error('Generating drafts for all ready leads...');
 
     const readyLeads = pipeline.leads.filter(l =>
@@ -444,17 +444,12 @@ async function main() {
     }, null, 2));
 
   } else if (args.leadId) {
-    console.error(`Generating draft for lead: ${args.leadId}`);
-
     const leadIndex = pipeline.leads.findIndex(l => l.id === args.leadId);
 
     if (leadIndex === -1) {
-      console.error(`✗ Lead not found: ${args.leadId}`);
-      console.log(JSON.stringify({
-        error: 'Lead not found',
+      fail('LEAD_NOT_FOUND', `Lead not found: ${args.leadId}`, {
         lead_id: args.leadId
-      }));
-      process.exit(1);
+      });
     }
 
     const lead = pipeline.leads[leadIndex];
@@ -482,24 +477,29 @@ async function main() {
       drafted_at: updatedLead.drafted_at
     }, null, 2));
   } else {
-    console.error(JSON.stringify({
-      error: 'Missing required arguments',
+    fail('INVALID_ARGS', 'Missing required arguments: --lead <id> or --all', {
       usage: 'voila/draft --lead <id> OR voila/draft --all [--template <variant>]',
       examples: [
         'voila/draft --lead abc-123-def',
         'voila/draft --all',
         'voila/draft --all --template independent'
       ]
-    }));
-    process.exit(1);
+    });
   }
 
   process.exit(0);
 }
 
 main().catch(error => {
-  console.error(JSON.stringify({
-    error: error.message
-  }));
-  process.exit(1);
+  // Map specific error messages to standardized codes
+  if (error.message.includes('Template not found') || error.message.includes('Invalid template format')) {
+    fail('TEMPLATE_PARSE_FAILED', error.message, null);
+  }
+  if (error.message.includes('Required value missing for placeholder')) {
+    fail('TEMPLATE_PARSE_FAILED', error.message, null);
+  }
+  if (error.message.includes('missing subject') || error.message.includes('missing body') || error.message.includes('Unsupported placeholders')) {
+    fail('TEMPLATE_PARSE_FAILED', error.message, null);
+  }
+  fail('UNEXPECTED_ERROR', error.message, null);
 });

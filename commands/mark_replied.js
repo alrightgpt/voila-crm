@@ -21,6 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
+const { fail } = require(path.join(__dirname, '../lib/errors.js'));
 
 // Pipeline state file
 const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
@@ -67,92 +68,69 @@ function parseArgs() {
 }
 
 async function main() {
-  console.error('Voilà: Marking lead as replied...');
-
   const args = parseArgs();
 
   if (!args.leadId) {
-    console.error('✗ Missing required argument: --lead <id>');
-    console.log(JSON.stringify({
-      error: 'Missing required argument',
-      usage: 'voila/mark_replied --lead <id> --reply-message-id <id>',
+    fail('INVALID_ARGS', 'Missing required argument: --lead <id>', {
+      usage: 'voila/mark_replied --lead <id> --reply-message-id <id> --in-reply-to <id>',
       example: 'voila/mark_replied --lead abc-123-def --reply-message-id <some-message-id> --in-reply-to <outbound-message-id>'
-    }));
-    process.exit(1);
+    });
   }
 
   if (!args.replyMessageId || args.replyMessageId.trim() === '') {
-    console.error('✗ Missing required argument: --reply-message-id <id>');
-    console.log(JSON.stringify({
-      error: 'Missing required argument',
-      usage: 'voila/mark_replied --lead <id> --reply-message-id <id>',
+    fail('INVALID_ARGS', 'Missing required argument: --reply-message-id <id>', {
+      usage: 'voila/mark_replied --lead <id> --reply-message-id <id> --in-reply-to <id>',
       example: 'voila/mark_replied --lead abc-123-def --reply-message-id <some-message-id> --in-reply-to <outbound-message-id>'
-    }));
-    process.exit(1);
+    });
   }
 
   if (!args.inReplyTo || args.inReplyTo.trim() === '') {
-    console.error('✗ Missing required argument: --in-reply-to <id>');
-    console.log(JSON.stringify({
-      error: 'Missing required argument',
+    fail('INVALID_ARGS', 'Missing required argument: --in-reply-to <id>', {
       usage: 'voila/mark_replied --lead <id> --reply-message-id <id> --in-reply-to <id>',
       example: 'voila/mark_replied --lead abc-123-def --reply-message-id <some-message-id> --in-reply-to <outbound-message-id>'
-    }));
-    process.exit(1);
+    });
   }
 
   const pipeline = loadPipeline();
   const leadIndex = pipeline.leads.findIndex(l => l.id === args.leadId);
 
   if (leadIndex === -1) {
-    console.error(`✗ Lead not found: ${args.leadId}`);
-    console.log(JSON.stringify({
-      error: 'Lead not found',
+    fail('LEAD_NOT_FOUND', `Lead not found: ${args.leadId}`, {
       lead_id: args.leadId
-    }));
-    process.exit(1);
+    });
   }
 
   const lead = pipeline.leads[leadIndex];
 
-  // Validate lead is in SENT state
-
   // Validate in-reply-to linkage
   if (args.inReplyTo !== null && args.inReplyTo.trim() !== '') {
     if (!lead.send_status || !lead.send_status.message_id || lead.send_status.message_id.trim() === '') {
-      console.error('✗ No outbound message ID found for this lead');
-      console.log(JSON.stringify({
-        error: 'No outbound message ID found',
+      fail('INVALID_STATE', 'No outbound message ID found for this lead', {
         lead_id: args.leadId,
         expected_outbound_message_id: null,
         provided_in_reply_to: args.inReplyTo
-      }));
-      process.exit(1);
+      });
     }
 
     if (lead.send_status.message_id !== args.inReplyTo) {
-      console.error('✗ In-reply-to does not match outbound message ID');
-      console.log(JSON.stringify({
-        error: 'In-reply-to mismatch',
+      fail('INVALID_STATE', 'In-reply-to does not match outbound message ID', {
         lead_id: args.leadId,
         current_state: lead.state,
         expected_outbound_message_id: lead.send_status.message_id,
         provided_in_reply_to: args.inReplyTo
-      }));
-      process.exit(1);
+      });
     }
   }
 
-if (lead.state !== 'SENT') {
-    console.error(`✗ Lead is not in SENT state (current: ${lead.state})`);
-    console.log(JSON.stringify({
-      error: 'Lead must be in SENT state to mark as replied',
+  if (lead.state !== 'SENT') {
+    fail('INVALID_STATE', 'Lead must be in SENT state to mark as replied', {
       lead_id: args.leadId,
       current_state: lead.state,
       required_state: 'SENT'
-    }));
-    process.exit(1);
+    });
   }
+
+  console.error('Voilà: Marking lead as replied...');
 
   // Store previous state for confirmation
   const previousState = lead.state;
@@ -183,8 +161,5 @@ if (lead.state !== 'SENT') {
 }
 
 main().catch(error => {
-  console.error(JSON.stringify({
-    error: error.message
-  }));
-  process.exit(1);
+  fail('UNEXPECTED_ERROR', error.message, null);
 });

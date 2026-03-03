@@ -26,6 +26,7 @@ const path = require('path');
 const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
 const { sendEmail } = require(path.join(__dirname, '../lib/smtp-client.js'));
 const { runPreflight } = require(path.join(__dirname, '../lib/preflight.js'));
+const { fail } = require(path.join(__dirname, '../lib/errors.js'));
 
 // Pipeline state file
 const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
@@ -294,11 +295,9 @@ function parseArgs() {
   if (result.checkEnv) {
     // check-env mode bypasses mode validation
   } else if (!['simulate', 'send_if_enabled'].includes(result.mode)) {
-    console.error(JSON.stringify({
-      error: 'Invalid mode. Must be "simulate" or "send_if_enabled"',
+    fail('INVALID_ARGS', 'Invalid mode. Must be "simulate" or "send_if_enabled"', {
       provided: result.mode
-    }));
-    process.exit(1);
+    });
   }
 
   return result;
@@ -430,13 +429,11 @@ async function main() {
     });
 
     if (!preflightResult.ok) {
-      console.log(JSON.stringify({
-        error: 'PRECHECK_FAILED',
+      fail(preflightResult.code, `Preflight check failed: ${preflightResult.gate}`, {
         gate: preflightResult.gate,
-        code: preflightResult.code,
-        details: preflightResult.details
-      }, null, 2));
-      process.exit(1);
+        preflight_code: preflightResult.code,
+        preflight_details: preflightResult.details
+      });
     }
 
     console.error('Voilà: Processing email sends...');
@@ -480,8 +477,7 @@ async function main() {
 
     console.log(JSON.stringify(result, null, 2));
   } else {
-    console.error(JSON.stringify({
-      error: 'Missing required arguments',
+    fail('INVALID_ARGS', 'Missing required arguments: --lead <id> or --all', {
       usage: 'voila/send --lead <id> OR voila/send --all [--mode <mode>] [--dry-run]',
       modes: {
         simulate: 'Log what would be sent without sending (default)',
@@ -493,16 +489,12 @@ async function main() {
         'voila/send --all --mode simulate',
         'voila/send --all --mode send_if_enabled --dry-run'
       ]
-    }));
-    process.exit(1);
+    });
   }
 
   process.exit(0);
 }
 
 main().catch(error => {
-  console.error(JSON.stringify({
-    error: error.message
-  }));
-  process.exit(1);
+  fail('UNEXPECTED_ERROR', error.message, null);
 });

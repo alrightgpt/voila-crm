@@ -19,6 +19,7 @@
 const fs = require('fs');
 const path = require('path');
 const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
+const { fail } = require(path.join(__dirname, '../lib/errors.js'));
 
 // Pipeline state file
 const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
@@ -59,56 +60,44 @@ function parseArgs() {
 }
 
 async function main() {
-  console.error('Voilà: Approving lead for sending...');
-
   const pipeline = loadPipeline();
   const args = parseArgs();
 
   if (!args.leadId) {
-    console.error(JSON.stringify({
-      error: 'Missing required argument',
+    fail('INVALID_ARGS', 'Missing required argument: --lead <id>', {
       usage: 'voila/approve --lead <id>',
       example: 'voila/approve --lead abc-123-def'
-    }));
-    process.exit(1);
+    });
   }
-
-  console.error(`Approving lead: ${args.leadId}`);
 
   const leadIndex = pipeline.leads.findIndex(l => l.id === args.leadId);
 
   if (leadIndex === -1) {
-    console.error(`✗ Lead not found: ${args.leadId}`);
-    console.log(JSON.stringify({
-      error: 'Lead not found',
+    fail('LEAD_NOT_FOUND', `Lead not found: ${args.leadId}`, {
       lead_id: args.leadId
-    }));
-    process.exit(1);
+    });
   }
 
   const lead = pipeline.leads[leadIndex];
 
   // Validate lead is in DRAFTED state
   if (lead.state !== 'DRAFTED') {
-    console.error(`✗ Lead is not in DRAFTED state (current: ${lead.state})`);
-    console.log(JSON.stringify({
-      error: 'Lead must be in DRAFTED state to approve',
+    fail('INVALID_STATE', 'Lead must be in DRAFTED state to approve', {
       lead_id: args.leadId,
       current_state: lead.state,
       required_state: 'DRAFTED'
-    }));
-    process.exit(1);
+    });
   }
 
   // Validate lead has a draft
   if (!lead.draft) {
-    console.error(`✗ Lead has no draft to approve`);
-    console.log(JSON.stringify({
-      error: 'Lead must have a draft to approve',
+    fail('DRAFT_MISSING', 'Lead must have a draft to approve', {
       lead_id: args.leadId
-    }));
-    process.exit(1);
+    });
   }
+
+  console.error('Voilà: Approving lead for sending...');
+  console.error(`Approving lead: ${args.leadId}`);
 
   const previousState = lead.state;
 
@@ -133,8 +122,5 @@ async function main() {
 }
 
 main().catch(error => {
-  console.error(JSON.stringify({
-    error: error.message
-  }));
-  process.exit(1);
+  fail('UNEXPECTED_ERROR', error.message, null);
 });
