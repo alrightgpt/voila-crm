@@ -63,7 +63,7 @@ function loadTemplate(templateVariant) {
 
 /**
  * Parse template to extract subject and body
- * Format: First line "SUBJECT: <subject>", blank line, then body
+ * Format: First line "SUBJECT: <subject>", then body (blank line or immediate)
  */
 function parseTemplate(content) {
   const lines = content.split('\n');
@@ -82,19 +82,18 @@ function parseTemplate(content) {
 
   const subject = subjectLine.substring(subjectPrefix.length).trim();
 
-  // Body is everything after the first blank line
+  // Body is everything after the subject line
+  // Skip the first blank line if present, otherwise start from line 2
   const bodyLines = [];
-  let foundBlank = false;
+  let startBody = 1;
 
-  for (let i = 1; i < lines.length; i++) {
-    if (!foundBlank && lines[i].trim() === '') {
-      foundBlank = true;
-      continue;
-    }
+  // If line 2 is blank, skip it and start from line 3
+  if (lines.length > 1 && lines[1].trim() === '') {
+    startBody = 2;
+  }
 
-    if (foundBlank) {
-      bodyLines.push(lines[i]);
-    }
+  for (let i = startBody; i < lines.length; i++) {
+    bodyLines.push(lines[i]);
   }
 
   const body = bodyLines.join('\n').trim();
@@ -103,7 +102,158 @@ function parseTemplate(content) {
 }
 
 /**
+ * Get first name from lead data with deterministic fallback logic
+ */
+function getFirstName(lead) {
+  const raw = lead.raw_data || {};
+
+  // first_name: lead.first_name if non-empty else first token of lead.name if present
+  if (raw.first_name && raw.first_name.trim() !== '') {
+    return raw.first_name.trim();
+  }
+
+  if (raw.name && raw.name.trim() !== '') {
+    const firstToken = raw.name.trim().split(/\s+/)[0];
+    if (firstToken) {
+      return firstToken;
+    }
+  }
+
+  return null; // FAIL
+}
+
+/**
+ * Get team name from lead data
+ * team_name: MUST use lead.team_name if non-empty
+ * NO fallback to company, brokerage, or name
+ * If token present and lead.team_name missing/empty → FAIL
+ */
+function getTeamName(lead) {
+  const raw = lead.raw_data || {};
+
+  // STRICT: Only use team_name field
+  if (raw.team_name && raw.team_name.trim() !== '') {
+    return raw.team_name.trim();
+  }
+
+  return null; // FAIL - no fallback
+}
+
+/**
+ * Get brokerage name from lead data
+ */
+function getBrokerageName(lead) {
+  const raw = lead.raw_data || {};
+
+  // Check in order: brokerage_name, brokerage, "Brokerage Name", then team_name as fallback
+  if (raw.brokerage_name && raw.brokerage_name.trim() !== '') {
+    return raw.brokerage_name.trim();
+  }
+
+  if (raw.brokerage && raw.brokerage.trim() !== '') {
+    return raw.brokerage.trim();
+  }
+
+  if (raw["Brokerage Name"] && raw["Brokerage Name"].trim() !== '') {
+    return raw["Brokerage Name"].trim();
+  }
+
+  // Fallback: if role indicates broker/team and brokerage truly absent, use team_name
+  const role = String(raw.role || '').toLowerCase();
+  if (role === 'broker' || role === 'team') {
+    if (raw.team_name && raw.team_name.trim() !== '') {
+      return raw.team_name.trim();
+    }
+  }
+
+  return null; // FAIL
+}
+
+/**
+ * Get company name alias from lead data
+ */
+function getCompanyNameAlias(lead) {
+  const raw = lead.raw_data || {};
+
+  // company_name alias: lead.team_name if non-empty else lead.brokerage if non-empty else FAIL
+  if (raw.team_name && raw.team_name.trim() !== '') {
+    return raw.team_name.trim();
+  }
+
+  if (raw.brokerage && raw.brokerage.trim() !== '') {
+    return raw.brokerage.trim();
+  }
+
+  return null; // FAIL
+}
+
+/**
+ * Check if any placeholder tokens remain in text
+ */
+function hasPlaceholdersRemaining(text) {
+  const supportedTokens = [
+    '\\[First Name\\]',
+    '\\[Team Name\\]',
+    '\\[Brokerage Name\\]',
+    '\\{\\{first_name\\}\\}',
+    '\\{\\{team_name\\}\\}',
+    '\\{\\{brokerage_name\\}\\}',
+    '\\{\\{company_name\\}\\}'
+  ];
+
+  for (const token of supportedTokens) {
+    if (new RegExp(token).test(text)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Render placeholders in template with deterministic values
+ * Token-driven: only fetch values for tokens that exist in template
+ * Supports bracket syntax: [First Name], [Team Name], [Brokerage Name]
+ * Supports moustache syntax: {{first_name}}, {{team_name}}, {{brokerage_name}}, {{company_name}}
+ */
+function renderPlaceholders(template, lead) {
+  const raw = lead.raw_data || {};
+  const enriched = lead.enriched_data || {};
+
+  // Define token-getter pairs
+  const tokenGetters = [
+    // Bracket tokens
+    { token: '[First Name]', getter: () => getFirstName(lead) },
+    { token: '[Team Name]', getter: () => getTeamName(lead) },
+    { token: '[Brokerage Name]', getter: () => getBrokerageName(lead) },
+    // Moustache tokens
+    { token: '{{first_name}}', getter: () => getFirstName(lead) },
+    { token: '{{team_name}}', getter: () => getTeamName(lead) },
+    { token: '{{brokerage_name}}', getter: () => getBrokerageName(lead) },
+    { token: '{{company_name}}', getter: () => getCompanyNameAlias(lead) }
+  ];
+
+  let rendered = template;
+  const used = [];
+
+  // Token-driven: only evaluate if token exists in template
+  for (const tokenGetter of tokenGetters) {
+    if (rendered.includes(tokenGetter.token)) {
+      const value = tokenGetter.getter();
+      if (value === null) {
+        throw new Error(`Required value missing for placeholder: ${tokenGetter.token}`);
+      }
+      rendered = rendered.replace(new RegExp(tokenGetter.token.replace(/[{}[\]]/g, '\\$&'), 'g'), value);
+      used.push(tokenGetter.token);
+    }
+  }
+
+  return { text: rendered, used };
+}
+
+/**
  * Personalize template with lead data
+ * Legacy function - kept for backwards compatibility with other tokens
  */
 function personalizeTemplate(template, lead) {
   const raw = lead.raw_data || {};
@@ -168,7 +318,6 @@ function selectTemplate(lead, forcedTemplate) {
 function generateDraft(lead, templateVariant) {
   const template = loadTemplate(templateVariant);
   const { subject, body } = parseTemplate(template);
-  const { text: personalizedBody, used } = personalizeTemplate(body, lead);
 
   // Validate subject and body are present
   if (!subject || subject.trim() === '') {
@@ -179,13 +328,28 @@ function generateDraft(lead, templateVariant) {
     throw new Error('Template missing body text');
   }
 
-  const personalizedSubject = personalizeTemplate(subject, lead).text;
+  // Render placeholders with deterministic dual-syntax support
+  const { text: renderedBody, used: usedBody } = renderPlaceholders(body, lead);
+  const { text: renderedSubject, used: usedSubject } = renderPlaceholders(subject, lead);
+
+  // Merge used tokens
+  const used = [...new Set([...usedBody, ...usedSubject])];
+
+  // Hard-fail validation: Check if any supported tokens remain
+  if (hasPlaceholdersRemaining(renderedSubject)) {
+    throw new Error('Validation failed: Unsupported placeholders remain in subject');
+  }
+
+  if (hasPlaceholdersRemaining(renderedBody)) {
+    throw new Error('Validation failed: Unsupported placeholders remain in body');
+  }
 
   return {
-    subject: personalizedSubject,
-    body_text: personalizedBody,
+    subject: renderedSubject,
+    body_text: renderedBody,
     personalization_used: used,
-    confidence_score: used.length > 0 ? 0.8 : 0.5
+    confidence_score: used.length > 0 ? 0.8 : 0.5,
+    placeholders_remaining: false
   };
 }
 
@@ -194,7 +358,7 @@ function generateDraft(lead, templateVariant) {
  */
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { leadId: null, all: false, template: null };
+  const result = { leadId: null, all: false, template: null, debug: false };
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--lead' && args[i + 1]) {
@@ -205,6 +369,8 @@ function parseArgs() {
     } else if (args[i] === '--template' && args[i + 1]) {
       result.template = args[i + 1];
       i++;
+    } else if (args[i] === '--debug') {
+      result.debug = true;
     }
   }
 
@@ -237,7 +403,9 @@ async function main() {
     for (const lead of readyLeads) {
       try {
         const templateVariant = selectTemplate(lead, args.template);
-        console.error(`DEBUG: Lead ${lead.raw_data.name}, template: ${templateVariant}`);
+        if (args.debug) {
+          console.error(`DEBUG: Lead ${lead.raw_data.name}, template: ${templateVariant}`);
+        }
         const draft = generateDraft(lead, templateVariant);
 
         // Transition through READY_TO_DRAFT first, then DRAFTED
@@ -291,7 +459,9 @@ async function main() {
 
     const lead = pipeline.leads[leadIndex];
     const templateVariant = selectTemplate(lead, args.template);
-    console.error(`DEBUG: Lead ${lead.raw_data.name}, template: ${templateVariant}`);
+    if (args.debug) {
+      console.error(`DEBUG: Lead ${lead.raw_data.name}, template: ${templateVariant}`);
+    }
     const draft = generateDraft(lead, templateVariant);
 
     // Transition through READY_TO_DRAFT first, then DRAFTED

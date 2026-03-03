@@ -49,6 +49,49 @@ function savePipeline(pipeline) {
 }
 
 /**
+ * Load environment variables from .env file deterministically
+ * @param {string} filePath - Path to .env file
+ * @returns {void}
+ */
+function loadEnvFileIfPresent(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return;
+  }
+
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const lines = content.split('\n');
+
+  for (let line of lines) {
+    const trimmedLine = line.trim();
+
+    // Ignore empty lines and comments
+    if (trimmedLine === '' || trimmedLine.startsWith('#')) {
+      continue;
+    }
+
+    // Split on first '='
+    const eqIndex = trimmedLine.indexOf('=');
+    if (eqIndex === -1) {
+      continue;
+    }
+
+    const key = trimmedLine.substring(0, eqIndex).trim();
+    let value = trimmedLine.substring(eqIndex + 1).trim();
+
+    // Strip surrounding quotes if value starts/ends with matching quotes
+    if ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+
+    // Only set if not already present (do not override existing env)
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+}
+
+/**
  * Load config
  */
 function loadConfig() {
@@ -56,6 +99,32 @@ function loadConfig() {
     return { send_enabled: false, simulation_mode: true };
   }
   return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+}
+
+/**
+ * Assert SMTP environment variables are present for live send
+ * @throws {Error} If any required env var is missing when attempting live send
+ */
+function assertSmtpEnvOrThrow(config, mode) {
+  // Only check for live send attempts
+  if (mode !== 'send_if_enabled' || config.send_enabled !== true) {
+    return;
+  }
+
+  const required = [
+    'VOILA_SMTP_HOST',
+    'VOILA_SMTP_PORT',
+    'VOILA_SMTP_USER',
+    'VOILA_SMTP_PASS',
+    'VOILA_FROM_NAME',
+    'VOILA_FROM_EMAIL'
+  ];
+
+  const missing = required.filter(key => !process.env[key]);
+
+  if (missing.length > 0) {
+    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  }
 }
 
 /**
@@ -86,7 +155,7 @@ function validateLead(lead) {
 /**
  * Process a single lead
  */
-async function processLead(lead, mode, config, dryRun) {
+async function processLead(lead, mode, config, dryRun, checkEnv) {
   const validationErrors = validateLead(lead);
 
   if (validationErrors.length > 0) {
@@ -117,9 +186,9 @@ async function processLead(lead, mode, config, dryRun) {
             message_id: result.message_id
           });
           updatedLead.send_status = {
-            sent_at: new Date().toISOString(),
-            message_id: result.message_id
-          };
+ sent_at: new Date().toISOString(),
+ message_id: result.message_id
+ };
           return {
             lead_id: lead.id,
             state: 'SENT',
@@ -172,7 +241,7 @@ async function processLead(lead, mode, config, dryRun) {
       ? 'send_enabled is false in config'
       : 'mode is simulate';
 
-    if (!dryRun) {
+    if (!dryRun && !checkEnv) {
       const updatedLead = transition(lead, 'SIMULATED', {
         mode: 'simulate',
         reason: blockReason,
@@ -202,7 +271,7 @@ async function processLead(lead, mode, config, dryRun) {
  */
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { leadId: null, all: false, mode: 'simulate', dryRun: false };
+  const result = { leadId: null, all: false, mode: 'simulate', dryRun: false, checkEnv: false };
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--lead' && args[i + 1]) {
@@ -215,11 +284,15 @@ function parseArgs() {
       i++;
     } else if (args[i] === '--dry-run') {
       result.dryRun = true;
+    } else if (args[i] === '--check-env') {
+      result.checkEnv = true;
     }
   }
 
   // Validate mode
-  if (!['simulate', 'send_if_enabled'].includes(result.mode)) {
+  if (result.checkEnv) {
+    // check-env mode bypasses mode validation
+  } else if (!['simulate', 'send_if_enabled'].includes(result.mode)) {
     console.error(JSON.stringify({
       error: 'Invalid mode. Must be "simulate" or "send_if_enabled"',
       provided: result.mode
@@ -231,16 +304,36 @@ function parseArgs() {
 }
 
 async function main() {
-  console.error('Voilà: Processing email sends...');
+  // Load environment variables from .env file deterministically
+  loadEnvFileIfPresent(path.join(__dirname, '..', '.env'));
 
   const config = loadConfig();
   const pipeline = loadPipeline();
   const args = parseArgs();
-  const results = [];
 
-  console.error(`Mode: ${args.mode}`);
-  console.error(`Send enabled: ${config.send_enabled}`);
-  console.error(`Dry run: ${args.dryRun}`);
+  // Handle --check-env mode: only check env presence and exit
+  if (args.checkEnv) {
+    const required = [
+      'VOILA_SMTP_HOST',
+      'VOILA_SMTP_PORT',
+      'VOILA_SMTP_USER',
+      'VOILA_SMTP_PASS',
+      'VOILA_FROM_NAME',
+      'VOILA_FROM_EMAIL'
+    ];
+
+    const presence = {};
+    for (const key of required) {
+      presence[key] = process.env[key] !== undefined ? 'PRESENT' : 'MISSING';
+    }
+
+    console.log(JSON.stringify(presence, null, 2));
+    process.exit(0);
+  }
+
+  console.error('Voilà: Processing email sends...');
+
+  const results = [];
 
   if (args.all) {
     console.error('Processing all leads in PENDING_SEND state...');
@@ -260,7 +353,7 @@ async function main() {
 
     for (const lead of readyLeads) {
       try {
-        const result = await processLead(lead, args.mode, config, args.dryRun);
+        const result = await processLead(lead, args.mode, config, args.dryRun, args.checkEnv);
         results.push(result);
 
         // Update pipeline if not dry run
@@ -273,9 +366,11 @@ async function main() {
                 processed_at: new Date().toISOString()
               });
               transitioned.send_status = {
-                ...transitioned.send_status,
-                processed_at: new Date().toISOString()
-              };
+ ...transitioned.send_status,
+ processed_at: new Date().toISOString(),
+ sent_at: result.sent_at ?? transitioned.send_status?.sent_at ?? null,
+ message_id: result.message_id ?? transitioned.send_status?.message_id ?? null
+ };
               pipeline.leads[index] = transitioned;
             } else if (result.state === 'FAILED') {
               const transitioned = transition(updatedLead, 'FAILED', {
@@ -349,7 +444,20 @@ async function main() {
       process.exit(1);
     }
 
-    const result = await processLead(lead, args.mode, config, args.dryRun);
+    // Preflight: Check SMTP env vars before attempting live send
+    try {
+      assertSmtpEnvOrThrow(config, args.mode);
+    } catch (error) {
+      console.error(`✗ Preflight check failed: ${error.message}`);
+      console.log(JSON.stringify({
+        error: error.message,
+        preflight_check: 'SMTP_ENV_VALIDATION',
+        lead_id: args.leadId
+      }));
+      process.exit(1);
+    }
+
+    const result = await processLead(lead, args.mode, config, args.dryRun, args.checkEnv);
 
     // Update pipeline if not dry run
     if (!args.dryRun) {
@@ -358,9 +466,11 @@ async function main() {
           processed_at: new Date().toISOString()
         });
         transitioned.send_status = {
-          ...transitioned.send_status,
-          processed_at: new Date().toISOString()
-        };
+ ...transitioned.send_status,
+ processed_at: new Date().toISOString(),
+ sent_at: result.sent_at ?? transitioned.send_status?.sent_at ?? null,
+ message_id: result.message_id ?? transitioned.send_status?.message_id ?? null
+ };
         pipeline.leads[leadIndex] = transitioned;
       } else if (result.state === 'FAILED') {
         const transitioned = transition(lead, 'FAILED', {
