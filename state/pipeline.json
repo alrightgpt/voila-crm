@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "last_updated": "2026-03-02T13:01:02.875Z",
+  "last_updated": "2026-03-03T11:31:38.773Z",
   "leads": [
     {
       "id": "62ea720d-379e-4584-89b9-0e4d3b0ff11d",
@@ -41,6 +41,48 @@
         }
       ],
       "drafted_at": "2026-03-02T13:01:02.875Z"
+    },
+    {
+      "id": "99ffdc28-81d3-4f13-93d9-be0176201af3",
+      "state": "IMPORTED",
+      "imported_at": "2026-03-03T11:31:38.772Z",
+      "updated_at": "2026-03-03T11:31:38.773Z",
+      "raw_data": {
+        "name": "Test A",
+        "first_name": "Test",
+        "email": "test-a@example.com",
+        "phone": "",
+        "company": "Acme",
+        "role": "independent",
+        "source_notes": "csv_import"
+      },
+      "dedupe_key": "test-a@example.com",
+      "validation_errors": [],
+      "enriched_data": null,
+      "draft": null,
+      "send_status": null,
+      "history": []
+    },
+    {
+      "id": "68bab0a2-6e3d-4a46-97e2-0cd77644edb5",
+      "state": "IMPORTED",
+      "imported_at": "2026-03-03T11:31:38.773Z",
+      "updated_at": "2026-03-03T11:31:38.773Z",
+      "raw_data": {
+        "name": "Test B",
+        "first_name": "Test",
+        "email": "test-b@example.com",
+        "phone": "",
+        "company": "Better",
+        "role": "independent",
+        "source_notes": "csv_import"
+      },
+      "dedupe_key": "test-b@example.com",
+      "validation_errors": [],
+      "enriched_data": null,
+      "draft": null,
+      "send_status": null,
+      "history": []
     }
   ]
 }
