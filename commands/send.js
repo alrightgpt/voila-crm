@@ -24,7 +24,6 @@
 const fs = require('fs');
 const path = require('path');
 const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
-const { sendEmail } = require(path.join(__dirname, '../lib/smtp-client.js'));
 const { runPreflight } = require(path.join(__dirname, '../lib/preflight.js'));
 const { fail } = require(path.join(__dirname, '../lib/errors.js'));
 const { takeSnapshot, diffSummary, assertInvariants, generateProof } = require(path.join(__dirname, '../lib/proof.js'));
@@ -180,6 +179,7 @@ async function processLead(lead, mode, config, dryRun, checkEnv) {
   if (shouldSend) {
     // Real send
     try {
+      const { sendEmail } = require(path.join(__dirname, '../lib/smtp-client.js'));
       const result = await sendEmail({ to: email, subject, body_text });
 
       if (result.status === 'sent') {
