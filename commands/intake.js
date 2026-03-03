@@ -2,34 +2,28 @@
 
 /**
  * Voilà Intake Command
- * Import leads from CSV or manual entry
+ * Import leads from CSV or manual entry with idempotency
  *
  * Input (CLI args):
  *   --csv <path>          Path to CSV file
- *   --manual <json>        JSON string of manual lead data
+ *   --manual <json>       JSON string of manual lead data
  *
  * Output (JSON):
  *   {
- *     "lead_id": "uuid",
- *     "state": "IMPORTED",
- *     "imported_at": "ISO8601",
- *     "validation_errors": []
+ *     "imported": <n>,
+ *     "skipped_duplicates": <n>,
+ *     "duplicates": [{ "email": "...", "existing_lead_id": "..." }],
+ *     "errors": [{ "row": <1-based>, "code": "...", "message": "...", "details": {} }]
  *   }
  */
 
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 const { parseCSV, normalizeLead, generateUUID } = require(path.join(__dirname, '../lib/csv-client.js'));
-const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
 const { fail } = require(path.join(__dirname, '../lib/errors.js'));
 
-// Pipeline state file
 const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
 
-/**
- * Load pipeline state
- */
 function loadPipeline() {
   if (!fs.existsSync(PIPELINE_FILE)) {
     return { version: '1.0.0', last_updated: null, leads: [] };
@@ -37,85 +31,19 @@ function loadPipeline() {
   return JSON.parse(fs.readFileSync(PIPELINE_FILE, 'utf-8'));
 }
 
-/**
- * Save pipeline state
- */
 function savePipeline(pipeline) {
   pipeline.last_updated = new Date().toISOString();
   fs.writeFileSync(PIPELINE_FILE, JSON.stringify(pipeline, null, 2));
 }
 
-/**
- * Generate deterministic dedupe key for lead
- * Priority: email (lowercase+trim) -> phone -> hash of raw_data
- */
-function generateDedupeKey(normalizedLead) {
-  if (normalizedLead.email) {
-    return normalizedLead.email.trim().toLowerCase();
-  }
-
-  if (normalizedLead.phone) {
-    return normalizedLead.phone.replace(/\D/g, ''); // Strip non-digits
-  }
-
-  // Fallback: hash of raw_data
-  const dataString = JSON.stringify(normalizedLead);
-  return crypto.createHash('sha256').update(dataString).digest('hex');
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
 }
 
-/**
- * Check if lead with dedupe_key already exists in pipeline
- */
-function isDuplicate(pipeline, dedupeKey) {
-  return pipeline.leads.some(lead => lead.dedupe_key === dedupeKey);
+function findLeadByEmail(pipeline, normalizedEmail) {
+  return pipeline.leads.find(l => normalizeEmail(l.raw_data?.email) === normalizedEmail);
 }
 
-/**
- * Import lead from normalized data
- */
-function importLead(pipeline, normalizedLead) {
-  const leadId = generateUUID();
-
-  // Validate required fields
-  const validationErrors = [];
-
-  // Require email OR phone
-  if (!normalizedLead.email && !normalizedLead.phone) {
-    validationErrors.push('Email or phone is required');
-  }
-
-  // Require name
-  if (!normalizedLead.name) {
-    validationErrors.push('Name is required');
-  }
-
-  // Generate dedupe key for idempotency
-  const dedupeKey = generateDedupeKey(normalizedLead);
-
-  // Create new lead object
-  const newLead = {
-    id: leadId,
-    state: 'IMPORTED',
-    imported_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    raw_data: normalizedLead,
-    dedupe_key: dedupeKey,
-    validation_errors: validationErrors,
-    enriched_data: null,
-    draft: null,
-    send_status: null,
-    history: []
-  };
-
-  // Add to pipeline
-  pipeline.leads.push(newLead);
-
-  return newLead;
-}
-
-/**
- * Parse CLI arguments
- */
 function parseArgs() {
   const args = process.argv.slice(2);
   const result = { source: null, csvPath: null, manualLead: null };
@@ -131,7 +59,7 @@ function parseArgs() {
         result.manualLead = JSON.parse(args[i + 1]);
       } catch (e) {
         fail('INVALID_ARGS', 'Invalid JSON for manual lead', {
-          example: '{"name":"John Doe","email":"john@example.com","company":"Acme Realty","role":"independent"}'
+          example: '{"name":"John","email":"john@example.com"}'
         });
       }
       i++;
@@ -139,12 +67,8 @@ function parseArgs() {
   }
 
   if (!result.source) {
-    fail('INVALID_ARGS', 'Missing required arguments: --csv <path> or --manual <json>', {
-      usage: 'voila/intake --csv <path> OR voila/intake --manual <json>',
-      examples: [
-        'voila/intake --csv /path/to/leads.csv',
-        'voila/intake --manual \'{"name":"John Doe","email":"john@example.com","company":"Acme Realty","role":"independent"}\''
-      ]
+    fail('INVALID_ARGS', 'Missing --csv <path> or --manual <json>', {
+      usage: 'voila/intake --csv <path> OR voila/intake --manual <json>'
     });
   }
 
@@ -154,116 +78,122 @@ function parseArgs() {
 async function main() {
   const pipeline = loadPipeline();
   const args = parseArgs();
-  const imported = [];
-  const duplicateSkipped = [];
-  const invalidRows = [];
 
   if (args.source === 'csv') {
-    try {
-      const leads = parseCSV(args.csvPath);
+    const leads = parseCSV(args.csvPath);
+    
+    const imported = [];
+    const duplicates = [];
+    const errors = [];
+    const seenEmails = new Set();
+    let rowNum = 0;
 
-      console.error('Voilà: Importing leads...');
-      console.error(`Importing from CSV: ${args.csvPath}`);
+    for (const rawLead of leads) {
+      rowNum++;
+      const normalizedEmail = normalizeEmail(rawLead.email);
 
-      for (const lead of leads) {
-        // Check for duplicate
-        const dedupeKey = generateDedupeKey(lead);
-
-        if (isDuplicate(pipeline, dedupeKey)) {
-          duplicateSkipped.push({
-            name: lead.name,
-            email: lead.email,
-            dedupe_key: dedupeKey
-          });
-          const contactInfo = lead.email ? lead.email : lead.phone;
-          console.error(`  ⊘ Duplicate skipped: ${lead.name} (${contactInfo})`);
-          continue;
-        }
-
-        // Check validation (email OR phone required, name required)
-        if ((!lead.email && !lead.phone) || !lead.name) {
-          const missing = [];
-          if (!lead.email && !lead.phone) missing.push('Email or phone');
-          if (!lead.name) missing.push('Name');
-
-          invalidRows.push({
-            name: lead.name || '<unknown>',
-            reason: missing.join(', ')
-          });
-          console.error(`  ✗ Invalid row: ${lead.name || '<unknown>'} (${missing.join(', ')})`);
-          continue;
-        }
-
-        const importedLead = importLead(pipeline, lead);
-        imported.push(importedLead);
-        const contactInfo = lead.email ? lead.email : lead.phone;
-        console.error(`  ✓ Imported: ${lead.name} (${contactInfo})`);
+      // Check for missing email
+      if (!normalizedEmail) {
+        errors.push({
+          row: rowNum,
+          code: 'EMAIL_MISSING',
+          message: 'Email required for deduplication',
+          details: { name: rawLead.name || '<unknown>' }
+        });
+        continue;
       }
 
-      savePipeline(pipeline);
+      // Check for duplicate in current batch
+      if (seenEmails.has(normalizedEmail)) {
+        const firstLead = imported.find(l => normalizeEmail(l.raw_data.email) === normalizedEmail);
+        duplicates.push({
+          email: normalizedEmail,
+          existing_lead_id: firstLead?.id || null
+        });
+        continue;
+      }
 
-      console.error(`\nImport summary:`);
-      console.error(`  Imported: ${imported.length}`);
-      console.error(`  Duplicates skipped: ${duplicateSkipped.length}`);
-      console.error(`  Invalid rows: ${invalidRows.length}`);
-      console.error(`  Total leads after: ${pipeline.leads.length}`);
+      // Check for duplicate in pipeline
+      const existing = findLeadByEmail(pipeline, normalizedEmail);
+      if (existing) {
+        duplicates.push({
+          email: normalizedEmail,
+          existing_lead_id: existing.id
+        });
+        continue;
+      }
 
-      console.log(JSON.stringify({
-        imported: imported.length,
-        duplicate_skipped: duplicateSkipped.length,
-        invalid_rows: invalidRows.length,
-        total_after: pipeline.leads.length,
-        leads: imported.map(l => ({
-          lead_id: l.id,
-          state: l.state,
-          name: l.raw_data.name,
-          email: l.raw_data.email,
-          validation_errors: l.validation_errors
-        }))
-      }, null, 2));
+      // Import the lead
+      const normalizedLead = normalizeLead(rawLead);
+      const newLead = {
+        id: generateUUID(),
+        state: 'IMPORTED',
+        imported_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        raw_data: normalizedLead,
+        dedupe_key: normalizedEmail,
+        validation_errors: [],
+        enriched_data: null,
+        draft: null,
+        send_status: null,
+        history: []
+      };
 
-    } catch (error) {
-      fail('INTAKE_PARSE_FAILED', error.message, {
-        imported: 0
-      });
+      imported.push(newLead);
+      seenEmails.add(normalizedEmail);
     }
+
+    // Only save if we imported something
+    if (imported.length > 0) {
+      pipeline.leads.push(...imported);
+      savePipeline(pipeline);
+    }
+
+    console.log(JSON.stringify({
+      imported: imported.length,
+      skipped_duplicates: duplicates.length,
+      duplicates,
+      errors
+    }, null, 2));
 
   } else if (args.source === 'manual') {
-    console.error('Voilà: Importing leads...');
-    console.error('Importing manual lead...');
+    const normalizedLead = normalizeLead(args.manualLead);
+    const normalizedEmail = normalizeEmail(normalizedLead.email);
 
-    try {
-      const normalizedLead = normalizeLead(args.manualLead);
-
-      // Check for duplicate
-      const dedupeKey = generateDedupeKey(normalizedLead);
-      if (isDuplicate(pipeline, dedupeKey)) {
-        fail('DUPLICATE_LEAD', 'Duplicate lead detected', {
-          lead_email: normalizedLead.email
-        });
-      }
-
-      const importedLead = importLead(pipeline, normalizedLead);
-
-      savePipeline(pipeline);
-
-      console.error(`✓ Imported: ${normalizedLead.name} (${normalizedLead.email})`);
-
-      console.log(JSON.stringify({
-        lead_id: importedLead.id,
-        state: importedLead.state,
-        imported_at: importedLead.imported_at,
-        validation_errors: importedLead.validation_errors
-      }), null, 2);
-
-    } catch (error) {
-      fail('UNEXPECTED_ERROR', error.message, null);
+    if (!normalizedEmail) {
+      fail('EMAIL_MISSING', 'Email required for manual intake', null);
     }
+
+    if (findLeadByEmail(pipeline, normalizedEmail)) {
+      fail('DUPLICATE_LEAD', 'Lead already exists', { email: normalizedEmail });
+    }
+
+    const newLead = {
+      id: generateUUID(),
+      state: 'IMPORTED',
+      imported_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      raw_data: normalizedLead,
+      dedupe_key: normalizedEmail,
+      validation_errors: [],
+      enriched_errors: null,
+      draft: null,
+      send_status: null,
+      history: []
+    };
+
+    pipeline.leads.push(newLead);
+    savePipeline(pipeline);
+
+    console.log(JSON.stringify({
+      imported: 1,
+      skipped_duplicates: 0,
+      duplicates: [],
+      errors: []
+    }, null, 2));
   }
 
   process.exit(0);
 }
 
-main().catch(error => {
-  fail('UNEXPECTED_ERROR', error.message, null);
-});
+main().catch(err => fail('UNEXPECTED_ERROR', err.message, null));
