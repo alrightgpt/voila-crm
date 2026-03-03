@@ -169,7 +169,7 @@ async function main() {
       continue;
     }
     
-    if (lead.state !== 'SENT') {
+    if (lead.state !== 'SENT' && lead.state !== 'REPLIED') {
       errors.push({
         index: i,
         code: 'LEAD_NOT_SENT',
@@ -190,9 +190,25 @@ async function main() {
         in_reply_to: message.in_reply_to,
         reply_message_id: message.message_id,
         from_email: message.from_email,
-        email_check: 'skipped'
+        email_check: 'skipped',
+        details: null,
+        already_replied: true
       });
       continue;
+    }
+    
+    // Email safety check: if both emails exist, verify they match (non-blocking)
+    let emailCheck = 'skipped';
+    let emailCheckDetails = null;
+    if (lead.raw_data?.email && message.from_email) {
+      const leadEmailNormalized = normalizeEmail(lead.raw_data.email);
+      if (leadEmailNormalized !== fromEmailNormalized) {
+        emailCheck = 'mismatch';
+        emailCheckDetails = {
+          lead_email: lead.raw_data.email,
+          message_from_email: message.from_email
+        };
+      }
     }
     
     matched++;
@@ -203,8 +219,8 @@ async function main() {
         in_reply_to: message.in_reply_to,
         reply_message_id: message.message_id,
         from_email: message.from_email,
-        email_check: 'skipped',
-        details: null,
+        email_check: emailCheck,
+        details: emailCheckDetails,
         would_transition_to: 'REPLIED'
       });
     } else {
@@ -226,8 +242,8 @@ async function main() {
         in_reply_to: message.in_reply_to,
         reply_message_id: message.message_id,
         from_email: message.from_email,
-        email_check: 'skipped',
-        details: null
+        email_check: emailCheck,
+        details: emailCheckDetails
       });
     }
   }
@@ -253,7 +269,7 @@ async function main() {
     processed,
     matched,
     updated,
-    skipped_already_replied: unmatchedMessages.length,
+    skipped_already_replied: skippedAlreadyReplied,
     unmatched: unmatchedMessages.length,
     matches,
     unmatched_messages: unmatchedMessages,
