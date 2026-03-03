@@ -274,7 +274,7 @@ async function processLead(lead, mode, config, dryRun, checkEnv) {
  */
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { leadId: null, all: false, mode: 'simulate', dryRun: false, checkEnv: false, prove: false };
+  const result = { leadId: null, all: false, mode: 'simulate', dryRun: false, checkEnv: false, prove: false, preflightOnly: false };
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--lead' && args[i + 1]) {
@@ -291,6 +291,8 @@ function parseArgs() {
       result.checkEnv = true;
     } else if (args[i] === '--prove') {
       result.prove = true;
+    } else if (args[i] === '--preflight-only') {
+      result.preflightOnly = true;
     }
   }
 
@@ -438,11 +440,19 @@ async function main() {
       env: process.env
     });
 
+    // Handle --preflight-only mode: return preflight result without sending or mutating state
+    if (args.preflightOnly) {
+      console.log(JSON.stringify(preflightResult, null, 2));
+      process.exit(0);
+    }
+
+    // Handle preflight failure in normal mode
     if (!preflightResult.ok) {
-      fail(preflightResult.code, `Preflight check failed: ${preflightResult.gate}`, {
-        gate: preflightResult.gate,
-        preflight_code: preflightResult.code,
-        preflight_details: preflightResult.details,
+      fail('PREFLIGHT_FAILED', `Preflight check failed: ${preflightResult.error.failed_check}`, {
+        failed_check: preflightResult.error.failed_check,
+        preflight_code: preflightResult.error.code,
+        preflight_message: preflightResult.error.message,
+        preflight_details: preflightResult.error.details,
         proof: args.prove ? generateProof({
           before,
           after: takeSnapshot({
