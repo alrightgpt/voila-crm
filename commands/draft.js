@@ -27,6 +27,7 @@ const fs = require('fs');
 const path = require('path');
 const { transition, getNextStates } = require(path.join(__dirname, '../lib/state-machine.js'));
 const { fail } = require(path.join(__dirname, '../lib/errors.js'));
+const { takeSnapshot, diffSummary, assertInvariants, generateProof } = require(path.join(__dirname, '../lib/proof.js'));
 
 // Pipeline state file
 const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
@@ -359,7 +360,7 @@ function generateDraft(lead, templateVariant) {
  */
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { leadId: null, all: false, template: null, debug: false };
+  const result = { leadId: null, all: false, template: null, debug: false, prove: false };
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--lead' && args[i + 1]) {
@@ -372,6 +373,8 @@ function parseArgs() {
       i++;
     } else if (args[i] === '--debug') {
       result.debug = true;
+    } else if (args[i] === '--prove') {
+      result.prove = true;
     }
   }
 
@@ -444,11 +447,28 @@ async function main() {
     }, null, 2));
 
   } else if (args.leadId) {
+    // Proof mode: take before snapshot
+    const before = args.prove ? takeSnapshot({
+      leadId: args.leadId,
+      pipelinePath: PIPELINE_FILE,
+      configPath: path.join(__dirname, '..', 'config.json')
+    }) : null;
+
     const leadIndex = pipeline.leads.findIndex(l => l.id === args.leadId);
 
     if (leadIndex === -1) {
       fail('LEAD_NOT_FOUND', `Lead not found: ${args.leadId}`, {
-        lead_id: args.leadId
+        lead_id: args.leadId,
+        proof: args.prove ? generateProof({
+          before,
+          after: takeSnapshot({
+            leadId: args.leadId,
+            pipelinePath: PIPELINE_FILE,
+            configPath: path.join(__dirname, '..', 'config.json')
+          }),
+          diffSummary,
+          assertInvariants
+        }) : undefined
       });
     }
 
@@ -470,12 +490,28 @@ async function main() {
 
     console.error(`✓ Drafted: ${lead.raw_data.name} (${lead.raw_data.email})`);
 
-    console.log(JSON.stringify({
+    const output = {
       lead_id: updatedLead.id,
       state: updatedLead.state,
       draft: updatedLead.draft,
       drafted_at: updatedLead.drafted_at
-    }, null, 2));
+    };
+
+    if (args.prove) {
+      const after = takeSnapshot({
+        leadId: args.leadId,
+        pipelinePath: PIPELINE_FILE,
+        configPath: path.join(__dirname, '..', 'config.json')
+      });
+      output._proof = generateProof({
+        before,
+        after,
+        diffSummary,
+        assertInvariants
+      });
+    }
+
+    console.log(JSON.stringify(output, null, 2));
   } else {
     fail('INVALID_ARGS', 'Missing required arguments: --lead <id> or --all', {
       usage: 'voila/draft --lead <id> OR voila/draft --all [--template <variant>]',

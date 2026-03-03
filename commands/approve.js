@@ -20,6 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
 const { fail } = require(path.join(__dirname, '../lib/errors.js'));
+const { takeSnapshot, diffSummary, assertInvariants, generateProof } = require(path.join(__dirname, '../lib/proof.js'));
 
 // Pipeline state file
 const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
@@ -47,12 +48,14 @@ function savePipeline(pipeline) {
  */
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { leadId: null };
+  const result = { leadId: null, prove: false };
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--lead' && args[i + 1]) {
       result.leadId = args[i + 1];
       i++;
+    } else if (args[i] === '--prove') {
+      result.prove = true;
     }
   }
 
@@ -70,11 +73,28 @@ async function main() {
     });
   }
 
+  // Proof mode: take before snapshot
+  const before = args.prove ? takeSnapshot({
+    leadId: args.leadId,
+    pipelinePath: PIPELINE_FILE,
+    configPath: path.join(__dirname, '..', 'config.json')
+  }) : null;
+
   const leadIndex = pipeline.leads.findIndex(l => l.id === args.leadId);
 
   if (leadIndex === -1) {
     fail('LEAD_NOT_FOUND', `Lead not found: ${args.leadId}`, {
-      lead_id: args.leadId
+      lead_id: args.leadId,
+      proof: args.prove ? generateProof({
+        before,
+        after: takeSnapshot({
+          leadId: args.leadId,
+          pipelinePath: PIPELINE_FILE,
+          configPath: path.join(__dirname, '..', 'config.json')
+        }),
+        diffSummary,
+        assertInvariants
+      }) : undefined
     });
   }
 
@@ -85,14 +105,34 @@ async function main() {
     fail('INVALID_STATE', 'Lead must be in DRAFTED state to approve', {
       lead_id: args.leadId,
       current_state: lead.state,
-      required_state: 'DRAFTED'
+      required_state: 'DRAFTED',
+      proof: args.prove ? generateProof({
+        before,
+        after: takeSnapshot({
+          leadId: args.leadId,
+          pipelinePath: PIPELINE_FILE,
+          configPath: path.join(__dirname, '..', 'config.json')
+        }),
+        diffSummary,
+        assertInvariants
+      }) : undefined
     });
   }
 
   // Validate lead has a draft
   if (!lead.draft) {
     fail('DRAFT_MISSING', 'Lead must have a draft to approve', {
-      lead_id: args.leadId
+      lead_id: args.leadId,
+      proof: args.prove ? generateProof({
+        before,
+        after: takeSnapshot({
+          leadId: args.leadId,
+          pipelinePath: PIPELINE_FILE,
+          configPath: path.join(__dirname, '..', 'config.json')
+        }),
+        diffSummary,
+        assertInvariants
+      }) : undefined
     });
   }
 
@@ -111,12 +151,28 @@ async function main() {
 
   console.error(`✓ Approved: ${lead.raw_data.name} (${lead.raw_data.email})`);
 
-  console.log(JSON.stringify({
+  const output = {
     lead_id: approvedLead.id,
     previous_state: previousState,
     new_state: approvedLead.state,
     approved_at: approvedLead.approved_at
-  }, null, 2));
+  };
+
+  if (args.prove) {
+    const after = takeSnapshot({
+      leadId: args.leadId,
+      pipelinePath: PIPELINE_FILE,
+      configPath: path.join(__dirname, '..', 'config.json')
+    });
+    output._proof = generateProof({
+      before,
+      after,
+      diffSummary,
+      assertInvariants
+    });
+  }
+
+  console.log(JSON.stringify(output, null, 2));
 
   process.exit(0);
 }

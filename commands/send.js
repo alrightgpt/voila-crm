@@ -27,6 +27,7 @@ const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
 const { sendEmail } = require(path.join(__dirname, '../lib/smtp-client.js'));
 const { runPreflight } = require(path.join(__dirname, '../lib/preflight.js'));
 const { fail } = require(path.join(__dirname, '../lib/errors.js'));
+const { takeSnapshot, diffSummary, assertInvariants, generateProof } = require(path.join(__dirname, '../lib/proof.js'));
 
 // Pipeline state file
 const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
@@ -273,7 +274,7 @@ async function processLead(lead, mode, config, dryRun, checkEnv) {
  */
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { leadId: null, all: false, mode: 'simulate', dryRun: false, checkEnv: false };
+  const result = { leadId: null, all: false, mode: 'simulate', dryRun: false, checkEnv: false, prove: false };
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--lead' && args[i + 1]) {
@@ -288,6 +289,8 @@ function parseArgs() {
       result.dryRun = true;
     } else if (args[i] === '--check-env') {
       result.checkEnv = true;
+    } else if (args[i] === '--prove') {
+      result.prove = true;
     }
   }
 
@@ -417,6 +420,13 @@ async function main() {
     }, null, 2));
 
   } else if (args.leadId) {
+    // Proof mode: take before snapshot
+    const before = args.prove ? takeSnapshot({
+      leadId: args.leadId,
+      pipelinePath: PIPELINE_FILE,
+      configPath: CONFIG_FILE
+    }) : null;
+
     const leadIndex = pipeline.leads.findIndex(l => l.id === args.leadId);
     const lead = leadIndex === -1 ? null : pipeline.leads[leadIndex];
 
@@ -432,7 +442,17 @@ async function main() {
       fail(preflightResult.code, `Preflight check failed: ${preflightResult.gate}`, {
         gate: preflightResult.gate,
         preflight_code: preflightResult.code,
-        preflight_details: preflightResult.details
+        preflight_details: preflightResult.details,
+        proof: args.prove ? generateProof({
+          before,
+          after: takeSnapshot({
+            leadId: args.leadId,
+            pipelinePath: PIPELINE_FILE,
+            configPath: CONFIG_FILE
+          }),
+          diffSummary,
+          assertInvariants
+        }) : undefined
       });
     }
 
@@ -475,7 +495,22 @@ async function main() {
       console.error(`  Error: ${result.error}`);
     }
 
-    console.log(JSON.stringify(result, null, 2));
+    const output = result;
+    if (args.prove) {
+      const after = takeSnapshot({
+        leadId: args.leadId,
+        pipelinePath: PIPELINE_FILE,
+        configPath: CONFIG_FILE
+      });
+      output._proof = generateProof({
+        before,
+        after,
+        diffSummary,
+        assertInvariants
+      });
+    }
+
+    console.log(JSON.stringify(output, null, 2));
   } else {
     fail('INVALID_ARGS', 'Missing required arguments: --lead <id> or --all', {
       usage: 'voila/send --lead <id> OR voila/send --all [--mode <mode>] [--dry-run]',
