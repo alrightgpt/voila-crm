@@ -25,6 +25,7 @@ const fs = require('fs');
 const path = require('path');
 const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
 const { sendEmail } = require(path.join(__dirname, '../lib/smtp-client.js'));
+const { runPreflight } = require(path.join(__dirname, '../lib/preflight.js'));
 
 // Pipeline state file
 const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
@@ -331,11 +332,10 @@ async function main() {
     process.exit(0);
   }
 
-  console.error('Voilà: Processing email sends...');
-
   const results = [];
 
   if (args.all) {
+    console.error('Voilà: Processing email sends...');
     console.error('Processing all leads in PENDING_SEND state...');
 
     const readyLeads = pipeline.leads.filter(l =>
@@ -418,44 +418,29 @@ async function main() {
     }, null, 2));
 
   } else if (args.leadId) {
-    console.error(`Processing lead: ${args.leadId}`);
-
     const leadIndex = pipeline.leads.findIndex(l => l.id === args.leadId);
+    const lead = leadIndex === -1 ? null : pipeline.leads[leadIndex];
 
-    if (leadIndex === -1) {
-      console.error(`✗ Lead not found: ${args.leadId}`);
+    // Preflight gate - check before any send logic or state mutation
+    const preflightResult = runPreflight({
+      lead,
+      mode: args.mode,
+      config,
+      env: process.env
+    });
+
+    if (!preflightResult.ok) {
       console.log(JSON.stringify({
-        error: 'Lead not found',
-        lead_id: args.leadId
-      }));
+        error: 'PRECHECK_FAILED',
+        gate: preflightResult.gate,
+        code: preflightResult.code,
+        details: preflightResult.details
+      }, null, 2));
       process.exit(1);
     }
 
-    const lead = pipeline.leads[leadIndex];
-
-    // Block DRAFTED leads - require explicit approval
-    if (lead.state === 'DRAFTED') {
-      console.error(`✗ Lead is in DRAFTED state and requires explicit approval.`);
-      console.log(JSON.stringify({
-        lead_id: args.leadId,
-        state: 'BLOCKED',
-        error: 'Lead is in DRAFTED state. Use voila/draft to review drafts, then explicitly approve leads before sending. To approve, transition lead to PENDING_SEND manually or use a dedicated approve command.'
-      }));
-      process.exit(1);
-    }
-
-    // Preflight: Check SMTP env vars before attempting live send
-    try {
-      assertSmtpEnvOrThrow(config, args.mode);
-    } catch (error) {
-      console.error(`✗ Preflight check failed: ${error.message}`);
-      console.log(JSON.stringify({
-        error: error.message,
-        preflight_check: 'SMTP_ENV_VALIDATION',
-        lead_id: args.leadId
-      }));
-      process.exit(1);
-    }
+    console.error('Voilà: Processing email sends...');
+    console.error(`Processing lead: ${args.leadId}`);
 
     const result = await processLead(lead, args.mode, config, args.dryRun, args.checkEnv);
 
