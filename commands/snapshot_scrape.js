@@ -25,7 +25,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { fail } = require(path.join(__dirname, '../lib/errors.js'));
+const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
 
 /**
  * Deterministic inline seed dataset
@@ -215,9 +215,11 @@ function main() {
     source: { mode: "inline", path: null }
   };
 
-  console.log(JSON.stringify(output, null, 2));
+  printOk(output);
 
   process.exit(0);
 }
 
-main();
+main().catch(error => {
+  printError('UNEXPECTED_ERROR', error.message, null);
+});

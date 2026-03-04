@@ -31,7 +31,7 @@
 const fs = require('fs');
 const path = require('path');
 const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
-const { fail } = require(path.join(__dirname, '../lib/errors.js'));
+const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
 const { takeSnapshot, diffSummary, assertInvariants, generateProof } = require(path.join(__dirname, '../lib/proof.js'));
 
 const PIPELINE_FILE_DEFAULT = path.join(__dirname, '../state/pipeline.json');
@@ -105,7 +105,7 @@ async function main() {
   const args = parseArgs();
   
   if (!args.inboxPath) {
-    fail('INVALID_ARGS', 'Missing required argument: --inbox-json <path>', {
+    printError('INVALID_ARGS', 'Missing required argument: --inbox-json <path>', {
       usage: 'voila/detect_replies --inbox-json <path> [--dry-run] [--prove] [--pipeline <path>] [--config <path>]',
       examples: [
         'voila/detect_replies --inbox-json /path/to/inbox.json',
@@ -114,10 +114,10 @@ async function main() {
       ]
     });
   }
-  
+
   const inbox = loadInbox(args.inboxPath);
   if (!inbox) {
-    fail('INTAKE_PARSE_FAILED', 'Failed to load or parse inbox JSON', {
+    printError('INTAKE_PARSE_FAILED', 'Failed to load or parse inbox JSON', {
       inbox_path: args.inboxPath
     });
   }
@@ -277,10 +277,10 @@ async function main() {
     _proof: proofOutput
   };
   
-  console.log(JSON.stringify(output, null, 2));
+  printOk(output);
   process.exit(0);
 }
 
 main().catch(error => {
-  fail('UNEXPECTED_ERROR', error.message, null);
+  printError('UNEXPECTED_ERROR', error.message, null);
 });

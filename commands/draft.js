@@ -26,7 +26,7 @@
 const fs = require('fs');
 const path = require('path');
 const { transition, getNextStates } = require(path.join(__dirname, '../lib/state-machine.js'));
-const { fail } = require(path.join(__dirname, '../lib/errors.js'));
+const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
 const { takeSnapshot, diffSummary, assertInvariants, generateProof } = require(path.join(__dirname, '../lib/proof.js'));
 
 // Pipeline state file
@@ -396,10 +396,10 @@ async function main() {
 
     if (readyLeads.length === 0) {
       console.error('No leads ready for drafting.');
-      console.log(JSON.stringify({
+      printOk({
         message: 'No leads ready for drafting',
         drafted: 0
-      }));
+      });
       process.exit(0);
     }
 
@@ -441,10 +441,10 @@ async function main() {
 
     console.error(`\nTotal drafted: ${results.length} leads`);
 
-    console.log(JSON.stringify({
+    printOk({
       drafted: results.length,
       drafts: results
-    }, null, 2));
+    });
 
   } else if (args.leadId) {
     // Proof mode: take before snapshot
@@ -457,7 +457,7 @@ async function main() {
     const leadIndex = pipeline.leads.findIndex(l => l.id === args.leadId);
 
     if (leadIndex === -1) {
-      fail('LEAD_NOT_FOUND', `Lead not found: ${args.leadId}`, {
+      printError('LEAD_NOT_FOUND', `Lead not found: ${args.leadId}`, {
         lead_id: args.leadId,
         proof: args.prove ? generateProof({
           before,
@@ -511,9 +511,9 @@ async function main() {
       });
     }
 
-    console.log(JSON.stringify(output, null, 2));
+    printOk(output);
   } else {
-    fail('INVALID_ARGS', 'Missing required arguments: --lead <id> or --all', {
+    printError('INVALID_ARGS', 'Missing required arguments: --lead <id> or --all', {
       usage: 'voila/draft --lead <id> OR voila/draft --all [--template <variant>]',
       examples: [
         'voila/draft --lead abc-123-def',
@@ -529,13 +529,13 @@ async function main() {
 main().catch(error => {
   // Map specific error messages to standardized codes
   if (error.message.includes('Template not found') || error.message.includes('Invalid template format')) {
-    fail('TEMPLATE_PARSE_FAILED', error.message, null);
+    printError('TEMPLATE_PARSE_FAILED', error.message, null);
   }
   if (error.message.includes('Required value missing for placeholder')) {
-    fail('TEMPLATE_PARSE_FAILED', error.message, null);
+    printError('TEMPLATE_PARSE_FAILED', error.message, null);
   }
   if (error.message.includes('missing subject') || error.message.includes('missing body') || error.message.includes('Unsupported placeholders')) {
-    fail('TEMPLATE_PARSE_FAILED', error.message, null);
+    printError('TEMPLATE_PARSE_FAILED', error.message, null);
   }
-  fail('UNEXPECTED_ERROR', error.message, null);
+  printError('UNEXPECTED_ERROR', error.message, null);
 });

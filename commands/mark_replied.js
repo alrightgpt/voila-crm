@@ -21,7 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
-const { fail } = require(path.join(__dirname, '../lib/errors.js'));
+const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
 const { takeSnapshot, diffSummary, assertInvariants, generateProof } = require(path.join(__dirname, '../lib/proof.js'));
 
 // Pipeline state file
@@ -74,21 +74,21 @@ async function main() {
   const args = parseArgs();
 
   if (!args.leadId) {
-    fail('INVALID_ARGS', 'Missing required argument: --lead <id>', {
+    printError('INVALID_ARGS', 'Missing required argument: --lead <id>', {
       usage: 'voila/mark_replied --lead <id> --reply-message-id <id> --in-reply-to <id>',
       example: 'voila/mark_replied --lead abc-123-def --reply-message-id <some-message-id> --in-reply-to <outbound-message-id>'
     });
   }
 
   if (!args.replyMessageId || args.replyMessageId.trim() === '') {
-    fail('INVALID_ARGS', 'Missing required argument: --reply-message-id <id>', {
+    printError('INVALID_ARGS', 'Missing required argument: --reply-message-id <id>', {
       usage: 'voila/mark_replied --lead <id> --reply-message-id <id> --in-reply-to <id>',
       example: 'voila/mark_replied --lead abc-123-def --reply-message-id <some-message-id> --in-reply-to <outbound-message-id>'
     });
   }
 
   if (!args.inReplyTo || args.inReplyTo.trim() === '') {
-    fail('INVALID_ARGS', 'Missing required argument: --in-reply-to <id>', {
+    printError('INVALID_ARGS', 'Missing required argument: --in-reply-to <id>', {
       usage: 'voila/mark_replied --lead <id> --reply-message-id <id> --in-reply-to <id>',
       example: 'voila/mark_replied --lead abc-123-def --reply-message-id <some-message-id> --in-reply-to <outbound-message-id>'
     });
@@ -106,7 +106,7 @@ async function main() {
   const leadIndex = pipeline.leads.findIndex(l => l.id === args.leadId);
 
   if (leadIndex === -1) {
-    fail('LEAD_NOT_FOUND', `Lead not found: ${args.leadId}`, {
+    printError('LEAD_NOT_FOUND', `Lead not found: ${args.leadId}`, {
       lead_id: args.leadId,
       proof: args.prove ? generateProof({
         before,
@@ -126,7 +126,7 @@ async function main() {
   // Validate in-reply-to linkage
   if (args.inReplyTo !== null && args.inReplyTo.trim() !== '') {
     if (!lead.send_status || !lead.send_status.message_id || lead.send_status.message_id.trim() === '') {
-      fail('INVALID_STATE', 'No outbound message ID found for this lead', {
+      printError('INVALID_STATE', 'No outbound message ID found for this lead', {
         lead_id: args.leadId,
         expected_outbound_message_id: null,
         provided_in_reply_to: args.inReplyTo,
@@ -144,7 +144,7 @@ async function main() {
     }
 
     if (lead.send_status.message_id !== args.inReplyTo) {
-      fail('INVALID_STATE', 'In-reply-to does not match outbound message ID', {
+      printError('INVALID_STATE', 'In-reply-to does not match outbound message ID', {
         lead_id: args.leadId,
         current_state: lead.state,
         expected_outbound_message_id: lead.send_status.message_id,
@@ -164,7 +164,7 @@ async function main() {
   }
 
   if (lead.state !== 'SENT') {
-    fail('INVALID_STATE', 'Lead must be in SENT state to mark as replied', {
+    printError('INVALID_STATE', 'Lead must be in SENT state to mark as replied', {
       lead_id: args.leadId,
       current_state: lead.state,
       required_state: 'SENT',
@@ -222,11 +222,11 @@ async function main() {
     });
   }
 
-  console.log(JSON.stringify(output, null, 2));
+  printOk(output);
 
   process.exit(0);
 }
 
 main().catch(error => {
-  fail('UNEXPECTED_ERROR', error.message, null);
+  printError('UNEXPECTED_ERROR', error.message, null);
 });

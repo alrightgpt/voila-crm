@@ -3,11 +3,12 @@
 /**
  * Voilà SMTP Test Command
  * Input: { "to": "string", "subject": "string", "body_text": "string" }
- * Output: { "status": "sent|failed", "error": "string?" }
+ * Output: { "ok": true, "status": "sent|failed", "error": "string?" }
  */
 
 const path = require('path');
 const { sendEmail, testConnection } = require(path.join(__dirname, '../lib/smtp-client.js'));
+const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
 
 // Parse CLI args
 const args = process.argv.slice(2);
@@ -16,12 +17,10 @@ const subject = args[1];
 const body_text = args[2] || 'This is a test email from Voilà.';
 
 if (!to || !subject) {
-  console.error(JSON.stringify({
-    error: 'Missing required arguments',
+  printError('INVALID_ARGS', 'Missing required arguments', {
     usage: 'voila/test_smtp <to> <subject> [body_text]',
     example: 'voila/test_smtp austin@example.com "Test Email" "Testing SMTP transport"'
-  }));
-  process.exit(1);
+  });
 }
 
 async function main() {
@@ -32,11 +31,7 @@ async function main() {
   const connectionOk = await testConnection();
 
   if (!connectionOk) {
-    console.log(JSON.stringify({
-      status: 'failed',
-      error: 'SMTP connection verification failed'
-    }));
-    process.exit(1);
+    printError('SMTP_CONNECTION_FAILED', 'SMTP connection verification failed', null);
   }
 
   console.error('Step 2: Connection verified. Sending test email...');
@@ -52,15 +47,11 @@ async function main() {
   }
 
   // Output JSON result
-  console.log(JSON.stringify(result, null, 2));
+  printOk(result);
 
   process.exit(result.status === 'sent' ? 0 : 1);
 }
 
 main().catch(error => {
-  console.error(JSON.stringify({
-    status: 'failed',
-    error: error.message
-  }));
-  process.exit(1);
+  printError('UNEXPECTED_ERROR', error.message, null);
 });

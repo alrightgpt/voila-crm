@@ -20,7 +20,7 @@
 const fs = require('fs');
 const path = require('path');
 const { parseCSV, normalizeLead, generateUUID } = require(path.join(__dirname, '../lib/csv-client.js'));
-const { fail } = require(path.join(__dirname, '../lib/errors.js'));
+const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
 
 const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
 
@@ -58,7 +58,7 @@ function parseArgs() {
       try {
         result.manualLead = JSON.parse(args[i + 1]);
       } catch (e) {
-        fail('INVALID_ARGS', 'Invalid JSON for manual lead', {
+        printError('INVALID_ARGS', 'Invalid JSON for manual lead', {
           example: '{"name":"John","email":"john@example.com"}'
         });
       }
@@ -67,7 +67,7 @@ function parseArgs() {
   }
 
   if (!result.source) {
-    fail('INVALID_ARGS', 'Missing --csv <path> or --manual <json>', {
+    printError('INVALID_ARGS', 'Missing --csv <path> or --manual <json>', {
       usage: 'voila/intake --csv <path> OR voila/intake --manual <json>'
     });
   }
@@ -149,23 +149,23 @@ async function main() {
       savePipeline(pipeline);
     }
 
-    console.log(JSON.stringify({
+    printOk({
       imported: imported.length,
       skipped_duplicates: duplicates.length,
       duplicates,
       errors
-    }, null, 2));
+    });
 
   } else if (args.source === 'manual') {
     const normalizedLead = normalizeLead(args.manualLead);
     const normalizedEmail = normalizeEmail(normalizedLead.email);
 
     if (!normalizedEmail) {
-      fail('EMAIL_MISSING', 'Email required for manual intake', null);
+      printError('EMAIL_MISSING', 'Email required for manual intake', null);
     }
 
     if (findLeadByEmail(pipeline, normalizedEmail)) {
-      fail('DUPLICATE_LEAD', 'Lead already exists', { email: normalizedEmail });
+      printError('DUPLICATE_LEAD', 'Lead already exists', { email: normalizedEmail });
     }
 
     const newLead = {
@@ -185,15 +185,15 @@ async function main() {
     pipeline.leads.push(newLead);
     savePipeline(pipeline);
 
-    console.log(JSON.stringify({
+    printOk({
       imported: 1,
       skipped_duplicates: 0,
       duplicates: [],
       errors: []
-    }, null, 2));
+    });
   }
 
   process.exit(0);
 }
 
-main().catch(err => fail('UNEXPECTED_ERROR', err.message, null));
+main().catch(err => printError('UNEXPECTED_ERROR', err.message, null));

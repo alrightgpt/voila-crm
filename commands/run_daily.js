@@ -48,7 +48,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { fail } = require(path.join(__dirname, '../lib/errors.js'));
+const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
 
 const PIPELINE_FILE_DEFAULT = path.join(__dirname, '../state/pipeline.json');
 const CONFIG_FILE_DEFAULT = path.join(__dirname, '../config.json');
@@ -315,10 +315,10 @@ function main() {
     ]
   };
 
-  console.log(JSON.stringify(output, null, 2));
+  printOk(output);
   process.exit(0);
 }
 
 main().catch(error => {
-  fail('UNEXPECTED_ERROR', error.message, null);
+  printError('UNEXPECTED_ERROR', error.message, null);
 });

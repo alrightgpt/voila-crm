@@ -25,7 +25,7 @@ const fs = require('fs');
 const path = require('path');
 const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
 const { runPreflight } = require(path.join(__dirname, '../lib/preflight.js'));
-const { fail } = require(path.join(__dirname, '../lib/errors.js'));
+const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
 const { takeSnapshot, diffSummary, assertInvariants, generateProof } = require(path.join(__dirname, '../lib/proof.js'));
 
 // Pipeline state file
@@ -348,10 +348,10 @@ async function main() {
 
     if (readyLeads.length === 0) {
       console.error('No leads ready to send.');
-      console.log(JSON.stringify({
+      printOk({
         message: 'No leads ready to send. Use voila/draft --all to create drafts, then manually approve leads.',
         processed: 0
-      }));
+      });
       process.exit(0);
     }
 
@@ -413,13 +413,13 @@ async function main() {
     console.error(`  Simulated: ${simulated}`);
     console.error(`  Failed: ${failed}`);
 
-    console.log(JSON.stringify({
+    printOk({
       processed: results.length,
       sent,
       simulated,
       failed,
       results
-    }, null, 2));
+    });
 
   } else if (args.leadId) {
     // Proof mode: take before snapshot
@@ -442,13 +442,13 @@ async function main() {
 
     // Handle --preflight-only mode: return preflight result without sending or mutating state
     if (args.preflightOnly) {
-      console.log(JSON.stringify(preflightResult, null, 2));
+      printOk(preflightResult);
       process.exit(0);
     }
 
     // Handle preflight failure in normal mode
     if (!preflightResult.ok) {
-      fail('PREFLIGHT_FAILED', `Preflight check failed: ${preflightResult.error.failed_check}`, {
+      printError('PREFLIGHT_FAILED', `Preflight check failed: ${preflightResult.error.failed_check}`, {
         failed_check: preflightResult.error.failed_check,
         preflight_code: preflightResult.error.code,
         preflight_message: preflightResult.error.message,
@@ -520,9 +520,9 @@ async function main() {
       });
     }
 
-    console.log(JSON.stringify(output, null, 2));
+    printOk(output);
   } else {
-    fail('INVALID_ARGS', 'Missing required arguments: --lead <id> or --all', {
+    printError('INVALID_ARGS', 'Missing required arguments: --lead <id> or --all', {
       usage: 'voila/send --lead <id> OR voila/send --all [--mode <mode>] [--dry-run]',
       modes: {
         simulate: 'Log what would be sent without sending (default)',
@@ -541,5 +541,5 @@ async function main() {
 }
 
 main().catch(error => {
-  fail('UNEXPECTED_ERROR', error.message, null);
+  printError('UNEXPECTED_ERROR', error.message, null);
 });

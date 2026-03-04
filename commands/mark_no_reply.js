@@ -42,7 +42,7 @@
 const fs = require('fs');
 const path = require('path');
 const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
-const { fail } = require(path.join(__dirname, '../lib/errors.js'));
+const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
 const { takeSnapshot, diffSummary, assertInvariants, generateProof } = require(path.join(__dirname, '../lib/proof.js'));
 
 const PIPELINE_FILE_DEFAULT = path.join(__dirname, '../state/pipeline.json');
@@ -108,7 +108,7 @@ async function main() {
 
   // Validate required args
   if (!args.now) {
-    fail('INVALID_ARGS', 'Missing required argument: --now <ISO8601>', {
+    printError('INVALID_ARGS', 'Missing required argument: --now <ISO8601>', {
       usage: 'voila/mark_no_reply --now <ISO8601> --after-days <int> [--dry-run] [--prove] [--pipeline <path>] [--config <path>]',
       examples: [
         'voila/mark_no_reply --now 2026-03-03T09:00:00.000Z --after-days 3',
@@ -119,7 +119,7 @@ async function main() {
   }
 
   if (args.afterDays === null) {
-    fail('INVALID_ARGS', 'Missing required argument: --after-days <int>', {
+    printError('INVALID_ARGS', 'Missing required argument: --after-days <int>', {
       usage: 'voila/mark_no_reply --now <ISO8601> --after-days <int> [--dry-run] [--prove] [--pipeline <path>] [--config <path>]'
     });
   }
@@ -127,7 +127,7 @@ async function main() {
   // Validate --now is valid ISO8601
   const nowMs = Date.parse(args.now);
   if (isNaN(nowMs)) {
-    fail('INVALID_ARGS', 'Invalid --now timestamp: must be valid ISO8601 format', {
+    printError('INVALID_ARGS', 'Invalid --now timestamp: must be valid ISO8601 format', {
       now: args.now
     });
   }
@@ -135,7 +135,7 @@ async function main() {
   // Validate --after-days is valid integer >= 0
   const afterDaysInt = parseInt(args.afterDays, 10);
   if (isNaN(afterDaysInt) || afterDaysInt < 0) {
-    fail('INVALID_ARGS', 'Invalid --after-days: must be integer >= 0', {
+    printError('INVALID_ARGS', 'Invalid --after-days: must be integer >= 0', {
       after_days: args.afterDays
     });
   }
@@ -273,10 +273,10 @@ async function main() {
     _proof: proofOutput
   };
 
-  console.log(JSON.stringify(output, null, 2));
+  printOk(output);
   process.exit(0);
 }
 
 main().catch(error => {
-  fail('UNEXPECTED_ERROR', error.message, null);
+  printError('UNEXPECTED_ERROR', error.message, null);
 });

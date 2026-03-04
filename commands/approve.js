@@ -19,7 +19,7 @@
 const fs = require('fs');
 const path = require('path');
 const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
-const { fail } = require(path.join(__dirname, '../lib/errors.js'));
+const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
 const { takeSnapshot, diffSummary, assertInvariants, generateProof } = require(path.join(__dirname, '../lib/proof.js'));
 
 // Pipeline state file
@@ -67,7 +67,7 @@ async function main() {
   const args = parseArgs();
 
   if (!args.leadId) {
-    fail('INVALID_ARGS', 'Missing required argument: --lead <id>', {
+    printError('INVALID_ARGS', 'Missing required argument: --lead <id>', {
       usage: 'voila/approve --lead <id>',
       example: 'voila/approve --lead abc-123-def'
     });
@@ -83,7 +83,7 @@ async function main() {
   const leadIndex = pipeline.leads.findIndex(l => l.id === args.leadId);
 
   if (leadIndex === -1) {
-    fail('LEAD_NOT_FOUND', `Lead not found: ${args.leadId}`, {
+    printError('LEAD_NOT_FOUND', `Lead not found: ${args.leadId}`, {
       lead_id: args.leadId,
       proof: args.prove ? generateProof({
         before,
@@ -102,7 +102,7 @@ async function main() {
 
   // Validate lead is in DRAFTED state
   if (lead.state !== 'DRAFTED') {
-    fail('INVALID_STATE', 'Lead must be in DRAFTED state to approve', {
+    printError('INVALID_STATE', 'Lead must be in DRAFTED state to approve', {
       lead_id: args.leadId,
       current_state: lead.state,
       required_state: 'DRAFTED',
@@ -121,7 +121,7 @@ async function main() {
 
   // Validate lead has a draft
   if (!lead.draft) {
-    fail('DRAFT_MISSING', 'Lead must have a draft to approve', {
+    printError('DRAFT_MISSING', 'Lead must have a draft to approve', {
       lead_id: args.leadId,
       proof: args.prove ? generateProof({
         before,
@@ -172,11 +172,11 @@ async function main() {
     });
   }
 
-  console.log(JSON.stringify(output, null, 2));
+  printOk(output);
 
   process.exit(0);
 }
 
 main().catch(error => {
-  fail('UNEXPECTED_ERROR', error.message, null);
+  printError('UNEXPECTED_ERROR', error.message, null);
 });
