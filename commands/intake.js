@@ -196,4 +196,4 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(err => printError('UNEXPECTED_ERROR', err.message, null));
+main().catch(err => printError('UNHANDLED_ERROR', err.message, null));

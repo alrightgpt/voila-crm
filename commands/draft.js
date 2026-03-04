@@ -537,5 +537,5 @@ main().catch(error => {
   if (error.message.includes('missing subject') || error.message.includes('missing body') || error.message.includes('Unsupported placeholders')) {
     printError('TEMPLATE_PARSE_FAILED', error.message, null);
   }
-  printError('UNEXPECTED_ERROR', error.message, null);
+  printError('UNHANDLED_ERROR', error.message, null);
 });

@@ -320,5 +320,5 @@ function main() {
 }
 
 main().catch(error => {
-  printError('UNEXPECTED_ERROR', error.message, null);
+  printError('UNHANDLED_ERROR', error.message, null);
 });
