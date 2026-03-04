@@ -25,16 +25,16 @@ const { withReceipt } = require(path.join(__dirname, '../lib/receipt.js'));
 
 const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
 
-function loadPipeline() {
-  if (!fs.existsSync(PIPELINE_FILE)) {
+function loadPipeline(pipelinePath) {
+  if (!fs.existsSync(pipelinePath)) {
     return { version: '1.0.0', last_updated: null, leads: [] };
   }
-  return JSON.parse(fs.readFileSync(PIPELINE_FILE, 'utf-8'));
+  return JSON.parse(fs.readFileSync(pipelinePath, 'utf-8'));
 }
 
-function savePipeline(pipeline) {
+function savePipeline(pipeline, pipelinePath) {
   pipeline.last_updated = new Date().toISOString();
-  fs.writeFileSync(PIPELINE_FILE, JSON.stringify(pipeline, null, 2));
+  fs.writeFileSync(pipelinePath, JSON.stringify(pipeline, null, 2));
 }
 
 function normalizeEmail(email) {
@@ -47,7 +47,7 @@ function findLeadByEmail(pipeline, normalizedEmail) {
 
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { source: null, csvPath: null, manualLead: null, receiptPath: null };
+  const result = { source: null, csvPath: null, manualLead: null, receiptPath: null, pipelinePath: PIPELINE_FILE };
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--csv' && args[i + 1]) {
@@ -65,14 +65,17 @@ function parseArgs() {
     } else if (args[i] === '--receipt' && args[i + 1]) {
       result.receiptPath = args[i + 1];
       i++;
+    } else if (args[i] === '--pipeline' && args[i + 1]) {
+      result.pipelinePath = args[i + 1];
+      i++;
     }
   }
 
   return result;
 }
 
-async function loadPipelineState() {
-  const pipeline = loadPipeline();
+async function loadPipelineState(pipelinePath) {
+  const pipeline = loadPipeline(pipelinePath);
   return pipeline;
 }
 
@@ -145,7 +148,7 @@ async function executeWithPipeline({ args, pipeline }) {
     // Only save if we imported something
     if (imported.length > 0) {
       pipeline.leads.push(...imported);
-      savePipeline(pipeline);
+      savePipeline(pipeline, args.pipelinePath);
     }
 
     printOk({
@@ -182,7 +185,7 @@ async function executeWithPipeline({ args, pipeline }) {
     };
 
     pipeline.leads.push(newLead);
-    savePipeline(pipeline);
+    savePipeline(pipeline, args.pipelinePath);
 
     printOk({
       imported: 1,
@@ -206,14 +209,14 @@ async function entrypoint() {
       receiptPath: parsedArgs.receiptPath,
       commandName: 'intake',
       args: { source: parsedArgs.source, csvPath: parsedArgs.csvPath, manualLead: parsedArgs.manualLead },
-      touchedPaths: [PIPELINE_FILE]
+      touchedPaths: [parsedArgs.pipelinePath]
     }, async () => {
       // Validate basic args
       if (!parsedArgs.source) {
         throw new Error('Missing --csv <path> or --manual <json>');
       }
 
-      const pipeline = await loadPipelineState();
+      const pipeline = await loadPipelineState(parsedArgs.pipelinePath);
       return await executeWithPipeline({ args: parsedArgs, pipeline });
     });
 

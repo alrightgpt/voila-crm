@@ -68,19 +68,19 @@ const CONFIG_FILE = path.join(__dirname, '../config.json');
 /**
  * Load pipeline state
  */
-function loadPipeline() {
-  if (!fs.existsSync(PIPELINE_FILE)) {
+function loadPipeline(pipelinePath) {
+  if (!fs.existsSync(pipelinePath)) {
     return { version: '1.0.0', last_updated: null, leads: [] };
   }
-  return JSON.parse(fs.readFileSync(PIPELINE_FILE, 'utf-8'));
+  return JSON.parse(fs.readFileSync(pipelinePath, 'utf-8'));
 }
 
 /**
  * Save pipeline state
  */
-function savePipeline(pipeline) {
+function savePipeline(pipeline, pipelinePath) {
   pipeline.last_updated = new Date().toISOString();
-  fs.writeFileSync(PIPELINE_FILE, JSON.stringify(pipeline, null, 2));
+  fs.writeFileSync(pipelinePath, JSON.stringify(pipeline, null, 2));
 }
 
 /**
@@ -307,7 +307,7 @@ async function processLead(lead, mode, config, dryRun, checkEnv) {
  */
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { leadId: null, all: false, mode: 'simulate', dryRun: false, checkEnv: false, prove: false, preflightOnly: false, receiptPath: null };
+  const result = { leadId: null, all: false, mode: 'simulate', dryRun: false, checkEnv: false, prove: false, preflightOnly: false, receiptPath: null, pipelinePath: PIPELINE_FILE };
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--lead' && args[i + 1]) {
@@ -328,6 +328,9 @@ function parseArgs() {
       result.preflightOnly = true;
     } else if (args[i] === '--receipt' && args[i + 1]) {
       result.receiptPath = args[i + 1];
+      i++;
+    } else if (args[i] === '--pipeline' && args[i + 1]) {
+      result.pipelinePath = args[i + 1];
       i++;
     }
   }
@@ -352,7 +355,7 @@ async function main() {
   loadEnvFileIfPresent(path.join(__dirname, '..', '.env'));
 
   const config = loadConfig();
-  const pipeline = loadPipeline();
+  const pipeline = loadPipeline(args.pipelinePath);
 
   // Helper to attach before hash and print with receipt
   const printResult = (output) => {
@@ -446,7 +449,7 @@ async function main() {
     }
 
     if (!args.dryRun) {
-      savePipeline(pipeline);
+      savePipeline(pipeline, args.pipelinePath);
     }
 
     console.error(`\nTotal processed: ${results.length} leads`);
@@ -536,7 +539,7 @@ async function main() {
         });
         pipeline.leads[leadIndex] = transitioned;
       }
-      savePipeline(pipeline);
+      savePipeline(pipeline, args.pipelinePath);
     }
 
     const statusIcon = result.state === 'SENT' ? '✓' :
@@ -555,7 +558,7 @@ async function main() {
     if (args.prove) {
       const after = takeSnapshot({
         leadId: args.leadId,
-        pipelinePath: PIPELINE_FILE,
+        pipelinePath: args.pipelinePath,
         configPath: CONFIG_FILE
       });
       output._proof = generateProof({

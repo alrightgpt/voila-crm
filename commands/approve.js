@@ -29,19 +29,19 @@ const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
 /**
  * Load pipeline state
  */
-function loadPipeline() {
-  if (!fs.existsSync(PIPELINE_FILE)) {
+function loadPipeline(pipelinePath) {
+  if (!fs.existsSync(pipelinePath)) {
     return { version: '1.0.0', last_updated: null, leads: [] };
   }
-  return JSON.parse(fs.readFileSync(PIPELINE_FILE, 'utf-8'));
+  return JSON.parse(fs.readFileSync(pipelinePath, 'utf-8'));
 }
 
 /**
  * Save pipeline state
  */
-function savePipeline(pipeline) {
+function savePipeline(pipeline, pipelinePath) {
   pipeline.last_updated = new Date().toISOString();
-  fs.writeFileSync(PIPELINE_FILE, JSON.stringify(pipeline, null, 2));
+  fs.writeFileSync(pipelinePath, JSON.stringify(pipeline, null, 2));
 }
 
 /**
@@ -49,7 +49,7 @@ function savePipeline(pipeline) {
  */
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { leadId: null, prove: false, receiptPath: null };
+  const result = { leadId: null, prove: false, receiptPath: null, pipelinePath: PIPELINE_FILE };
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--lead' && args[i + 1]) {
@@ -60,24 +60,27 @@ function parseArgs() {
     } else if (args[i] === '--receipt' && args[i + 1]) {
       result.receiptPath = args[i + 1];
       i++;
+    } else if (args[i] === '--pipeline' && args[i + 1]) {
+      result.pipelinePath = args[i + 1];
+      i++;
     }
   }
 
   return result;
 }
 
-async function execute({ leadId, prove, receiptPath }) {
+async function execute({ leadId, prove, receiptPath, pipelinePath }) {
   // Validate required args
   if (!leadId) {
     throw new Error('Missing required argument: --lead <id>');
   }
 
-  const pipeline = loadPipeline();
+  const pipeline = loadPipeline(pipelinePath);
 
   // Proof mode: take before snapshot
   const before = prove ? takeSnapshot({
     leadId: leadId,
-    pipelinePath: PIPELINE_FILE,
+    pipelinePath: pipelinePath,
     configPath: path.join(__dirname, '..', 'config.json')
   }) : null;
 
@@ -91,7 +94,7 @@ async function execute({ leadId, prove, receiptPath }) {
         before,
         after: takeSnapshot({
           leadId: leadId,
-          pipelinePath: PIPELINE_FILE,
+          pipelinePath: pipelinePath,
           configPath: path.join(__dirname, '..', 'config.json')
         }),
         diffSummary,
@@ -115,7 +118,7 @@ async function execute({ leadId, prove, receiptPath }) {
         before,
         after: takeSnapshot({
           leadId: leadId,
-          pipelinePath: PIPELINE_FILE,
+          pipelinePath: pipelinePath,
           configPath: path.join(__dirname, '..', 'config.json')
         }),
         diffSummary,
@@ -135,7 +138,7 @@ async function execute({ leadId, prove, receiptPath }) {
         before,
         after: takeSnapshot({
           leadId: leadId,
-          pipelinePath: PIPELINE_FILE,
+          pipelinePath: pipelinePath,
           configPath: path.join(__dirname, '..', 'config.json')
         }),
         diffSummary,
@@ -156,7 +159,7 @@ async function execute({ leadId, prove, receiptPath }) {
 
   // Save to pipeline
   pipeline.leads[leadIndex] = approvedLead;
-  savePipeline(pipeline);
+  savePipeline(pipeline, pipelinePath);
 
   console.error(`✓ Approved: ${lead.raw_data.name} (${lead.raw_data.email})`);
 
@@ -170,7 +173,7 @@ async function execute({ leadId, prove, receiptPath }) {
   if (prove) {
     const after = takeSnapshot({
       leadId: leadId,
-      pipelinePath: PIPELINE_FILE,
+      pipelinePath: pipelinePath,
       configPath: path.join(__dirname, '..', 'config.json')
     });
     output._proof = generateProof({
@@ -193,7 +196,7 @@ async function entrypoint() {
       receiptPath: args.receiptPath,
       commandName: 'approve',
       args: { lead_id: args.leadId, prove: args.prove },
-      touchedPaths: [PIPELINE_FILE]
+      touchedPaths: [args.pipelinePath]
     }, () => execute(args));
 
     printOk(stdoutObj);

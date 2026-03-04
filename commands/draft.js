@@ -36,19 +36,19 @@ const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
 /**
  * Load pipeline state
  */
-function loadPipeline() {
-  if (!fs.existsSync(PIPELINE_FILE)) {
+function loadPipeline(pipelinePath) {
+  if (!fs.existsSync(pipelinePath)) {
     return { version: '1.0.0', last_updated: null, leads: [] };
   }
-  return JSON.parse(fs.readFileSync(PIPELINE_FILE, 'utf-8'));
+  return JSON.parse(fs.readFileSync(pipelinePath, 'utf-8'));
 }
 
 /**
  * Save pipeline state
  */
-function savePipeline(pipeline) {
+function savePipeline(pipeline, pipelinePath) {
   pipeline.last_updated = new Date().toISOString();
-  fs.writeFileSync(PIPELINE_FILE, JSON.stringify(pipeline, null, 2));
+  fs.writeFileSync(pipelinePath, JSON.stringify(pipeline, null, 2));
 }
 
 /**
@@ -361,7 +361,7 @@ function generateDraft(lead, templateVariant) {
  */
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { leadId: null, all: false, template: null, debug: false, prove: false, receiptPath: null };
+  const result = { leadId: null, all: false, template: null, debug: false, prove: false, receiptPath: null, pipelinePath: PIPELINE_FILE };
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--lead' && args[i + 1]) {
@@ -379,6 +379,9 @@ function parseArgs() {
     } else if (args[i] === '--receipt' && args[i + 1]) {
       result.receiptPath = args[i + 1];
       i++;
+    } else if (args[i] === '--pipeline' && args[i + 1]) {
+      result.pipelinePath = args[i + 1];
+      i++;
     }
   }
 
@@ -387,7 +390,7 @@ function parseArgs() {
 
 async function main() {
   const args = parseArgs();
-  const pipeline = loadPipeline();
+  const pipeline = loadPipeline(args.pipelinePath);
   const results = [];
 
   if (args.all) {
@@ -436,7 +439,7 @@ async function main() {
       }
     }
 
-    savePipeline(pipeline);
+    savePipeline(pipeline, args.pipelinePath);
 
     console.error(`\nTotal drafted: ${results.length} leads`);
 
@@ -449,7 +452,7 @@ async function main() {
     // Proof mode: take before snapshot
     const before = args.prove ? takeSnapshot({
       leadId: args.leadId,
-      pipelinePath: PIPELINE_FILE,
+      pipelinePath: args.pipelinePath,
       configPath: path.join(__dirname, '..', 'config.json')
     }) : null;
 
@@ -462,7 +465,7 @@ async function main() {
           before,
           after: takeSnapshot({
             leadId: args.leadId,
-            pipelinePath: PIPELINE_FILE,
+            pipelinePath: args.pipelinePath,
             configPath: path.join(__dirname, '..', 'config.json')
           }),
           diffSummary,
@@ -485,7 +488,7 @@ async function main() {
     updatedLead.drafted_at = new Date().toISOString();
 
     pipeline.leads[leadIndex] = updatedLead;
-    savePipeline(pipeline);
+    savePipeline(pipeline, args.pipelinePath);
 
     console.error(`✓ Drafted: ${lead.raw_data.name} (${lead.raw_data.email})`);
 
@@ -499,7 +502,7 @@ async function main() {
     if (args.prove) {
       const after = takeSnapshot({
         leadId: args.leadId,
-        pipelinePath: PIPELINE_FILE,
+        pipelinePath: args.pipelinePath,
         configPath: path.join(__dirname, '..', 'config.json')
       });
       output._proof = generateProof({
@@ -526,7 +529,7 @@ async function entrypoint() {
       receiptPath: parsedArgs.receiptPath,
       commandName: 'draft',
       args: { lead_id: parsedArgs.leadId, all: parsedArgs.all, template: parsedArgs.template, debug: parsedArgs.debug, prove: parsedArgs.prove },
-      touchedPaths: [PIPELINE_FILE]
+      touchedPaths: [parsedArgs.pipelinePath]
     }, async () => {
       return await main();
     });
