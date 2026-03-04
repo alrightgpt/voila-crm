@@ -21,6 +21,7 @@ const path = require('path');
 const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
 const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
 const { takeSnapshot, diffSummary, assertInvariants, generateProof } = require(path.join(__dirname, '../lib/proof.js'));
+const { sha256FileOrNull } = require(path.join(__dirname, '../lib/receipt.js'));
 
 // Pipeline state file
 const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
@@ -48,7 +49,7 @@ function savePipeline(pipeline) {
  */
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { leadId: null, prove: false };
+  const result = { leadId: null, prove: false, receiptPath: null };
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--lead' && args[i + 1]) {
@@ -56,6 +57,9 @@ function parseArgs() {
       i++;
     } else if (args[i] === '--prove') {
       result.prove = true;
+    } else if (args[i] === '--receipt' && args[i + 1]) {
+      result.receiptPath = args[i + 1];
+      i++;
     }
   }
 
@@ -63,7 +67,6 @@ function parseArgs() {
 }
 
 async function main() {
-  const pipeline = loadPipeline();
   const args = parseArgs();
 
   if (!args.leadId) {
@@ -72,6 +75,9 @@ async function main() {
       example: 'voila/approve --lead abc-123-def'
     });
   }
+
+  const beforeHash = args.receiptPath ? sha256FileOrNull(PIPELINE_FILE) : null;
+  const pipeline = loadPipeline();
 
   // Proof mode: take before snapshot
   const before = args.prove ? takeSnapshot({
@@ -170,6 +176,32 @@ async function main() {
       diffSummary,
       assertInvariants
     });
+  }
+
+  // Write receipt if requested
+  if (args.receiptPath) {
+    const afterHash = sha256FileOrNull(PIPELINE_FILE);
+    const receipt = {
+      ok: true,
+      command: 'approve',
+      args: { lead_id: args.leadId, prove: args.prove },
+      touched_files: [
+        {
+          path: PIPELINE_FILE,
+          sha256_before: beforeHash,
+          sha256_after: afterHash
+        }
+      ],
+      stdout_json: output
+    };
+
+    try {
+      const tempPath = `${args.receiptPath}.tmp`;
+      fs.writeFileSync(tempPath, JSON.stringify(receipt, null, 2), 'utf-8');
+      fs.renameSync(tempPath, args.receiptPath);
+    } catch (receiptError) {
+      console.error(`[Receipt write failed: ${receiptError.message}]`);
+    }
   }
 
   printOk(output);

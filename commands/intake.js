@@ -21,6 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const { parseCSV, normalizeLead, generateUUID } = require(path.join(__dirname, '../lib/csv-client.js'));
 const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
+const { withReceipt } = require(path.join(__dirname, '../lib/receipt.js'));
 
 const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
 
@@ -46,7 +47,7 @@ function findLeadByEmail(pipeline, normalizedEmail) {
 
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { source: null, csvPath: null, manualLead: null };
+  const result = { source: null, csvPath: null, manualLead: null, receiptPath: null };
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--csv' && args[i + 1]) {
@@ -58,26 +59,24 @@ function parseArgs() {
       try {
         result.manualLead = JSON.parse(args[i + 1]);
       } catch (e) {
-        printError('INVALID_ARGS', 'Invalid JSON for manual lead', {
-          example: '{"name":"John","email":"john@example.com"}'
-        });
+        throw new Error('Invalid JSON for manual lead');
       }
       i++;
+    } else if (args[i] === '--receipt' && args[i + 1]) {
+      result.receiptPath = args[i + 1];
+      i++;
     }
-  }
-
-  if (!result.source) {
-    printError('INVALID_ARGS', 'Missing --csv <path> or --manual <json>', {
-      usage: 'voila/intake --csv <path> OR voila/intake --manual <json>'
-    });
   }
 
   return result;
 }
 
-async function main() {
+async function loadPipelineState() {
   const pipeline = loadPipeline();
-  const args = parseArgs();
+  return pipeline;
+}
+
+async function executeWithPipeline({ args, pipeline }) {
 
   if (args.source === 'csv') {
     const leads = parseCSV(args.csvPath);
@@ -161,11 +160,11 @@ async function main() {
     const normalizedEmail = normalizeEmail(normalizedLead.email);
 
     if (!normalizedEmail) {
-      printError('EMAIL_MISSING', 'Email required for manual intake', null);
+      throw new Error('Email required for manual intake');
     }
 
     if (findLeadByEmail(pipeline, normalizedEmail)) {
-      printError('DUPLICATE_LEAD', 'Lead already exists', { email: normalizedEmail });
+      throw new Error('Lead already exists');
     }
 
     const newLead = {
@@ -196,4 +195,47 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(err => printError('UNHANDLED_ERROR', err.message, null));
+// Entry point with receipt wrapping
+async function entrypoint() {
+  try {
+    // Parse args first to get receipt path
+    const parsedArgs = parseArgs();
+
+    // Always run with receipt to capture any errors
+    const stdoutObj = await withReceipt({
+      receiptPath: parsedArgs.receiptPath,
+      commandName: 'intake',
+      args: { source: parsedArgs.source, csvPath: parsedArgs.csvPath, manualLead: parsedArgs.manualLead },
+      touchedPaths: [PIPELINE_FILE]
+    }, async () => {
+      // Validate basic args
+      if (!parsedArgs.source) {
+        throw new Error('Missing --csv <path> or --manual <json>');
+      }
+
+      const pipeline = await loadPipelineState();
+      return await executeWithPipeline({ args: parsedArgs, pipeline });
+    });
+
+    process.exit(0);
+  } catch (err) {
+    // Receipt already written by withReceipt, now just print error
+    if (err.message === 'Missing --csv <path> or --manual <json>') {
+      printError('INVALID_ARGS', err.message, {
+        usage: 'voila/intake --csv <path> OR voila/intake --manual <json>'
+      });
+    } else if (err.message === 'Invalid JSON for manual lead') {
+      printError('INVALID_ARGS', err.message, {
+        example: '{"name":"John","email":"john@example.com"}'
+      });
+    } else if (err.message === 'Email required for manual intake') {
+      printError('EMAIL_MISSING', err.message, null);
+    } else if (err.message === 'Lead already exists') {
+      printError('DUPLICATE_LEAD', err.message, null);
+    } else {
+      printError('UNHANDLED_ERROR', err.message, null);
+    }
+  }
+}
+
+entrypoint();

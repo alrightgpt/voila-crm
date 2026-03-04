@@ -28,6 +28,7 @@ const path = require('path');
 const { transition, getNextStates } = require(path.join(__dirname, '../lib/state-machine.js'));
 const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
 const { takeSnapshot, diffSummary, assertInvariants, generateProof } = require(path.join(__dirname, '../lib/proof.js'));
+const { withReceipt } = require(path.join(__dirname, '../lib/receipt.js'));
 
 // Pipeline state file
 const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
@@ -360,7 +361,7 @@ function generateDraft(lead, templateVariant) {
  */
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { leadId: null, all: false, template: null, debug: false, prove: false };
+  const result = { leadId: null, all: false, template: null, debug: false, prove: false, receiptPath: null };
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--lead' && args[i + 1]) {
@@ -375,6 +376,9 @@ function parseArgs() {
       result.debug = true;
     } else if (args[i] === '--prove') {
       result.prove = true;
+    } else if (args[i] === '--receipt' && args[i + 1]) {
+      result.receiptPath = args[i + 1];
+      i++;
     }
   }
 
@@ -382,8 +386,8 @@ function parseArgs() {
 }
 
 async function main() {
-  const pipeline = loadPipeline();
   const args = parseArgs();
+  const pipeline = loadPipeline();
   const results = [];
 
   if (args.all) {
@@ -395,12 +399,7 @@ async function main() {
     );
 
     if (readyLeads.length === 0) {
-      console.error('No leads ready for drafting.');
-      printOk({
-        message: 'No leads ready for drafting',
-        drafted: 0
-      });
-      process.exit(0);
+      throw new Error('No leads ready for drafting');
     }
 
     for (const lead of readyLeads) {
@@ -441,10 +440,10 @@ async function main() {
 
     console.error(`\nTotal drafted: ${results.length} leads`);
 
-    printOk({
+    return {
       drafted: results.length,
       drafts: results
-    });
+    };
 
   } else if (args.leadId) {
     // Proof mode: take before snapshot
@@ -511,31 +510,50 @@ async function main() {
       });
     }
 
-    printOk(output);
+    return output;
   } else {
-    printError('INVALID_ARGS', 'Missing required arguments: --lead <id> or --all', {
-      usage: 'voila/draft --lead <id> OR voila/draft --all [--template <variant>]',
-      examples: [
-        'voila/draft --lead abc-123-def',
-        'voila/draft --all',
-        'voila/draft --all --template independent'
-      ]
-    });
+    throw new Error('Missing required arguments: --lead <id> or --all');
   }
-
-  process.exit(0);
 }
 
-main().catch(error => {
-  // Map specific error messages to standardized codes
-  if (error.message.includes('Template not found') || error.message.includes('Invalid template format')) {
-    printError('TEMPLATE_PARSE_FAILED', error.message, null);
+// Entry point with receipt wrapping
+async function entrypoint() {
+  try {
+    const parsedArgs = parseArgs();
+
+    // Always run with receipt to capture any errors
+    const stdoutObj = await withReceipt({
+      receiptPath: parsedArgs.receiptPath,
+      commandName: 'draft',
+      args: { lead_id: parsedArgs.leadId, all: parsedArgs.all, template: parsedArgs.template, debug: parsedArgs.debug, prove: parsedArgs.prove },
+      touchedPaths: [PIPELINE_FILE]
+    }, async () => {
+      return await main();
+    });
+
+    printOk(stdoutObj);
+    process.exit(0);
+  } catch (err) {
+    // Receipt already written by withReceipt, now just print error
+    if (err.message === 'Missing required arguments: --lead <id> or --all') {
+      printError('INVALID_ARGS', err.message, {
+        usage: 'voila/draft --lead <id> OR voila/draft --all [--template <variant>]',
+        examples: [
+          'voila/draft --lead abc-123-def',
+          'voila/draft --all',
+          'voila/draft --all --template independent'
+        ]
+      });
+    } else if (err.message === 'No leads ready for drafting') {
+      printOk({
+        message: 'No leads ready for drafting',
+        drafted: 0
+      });
+      process.exit(0);
+    } else {
+      printError('UNHANDLED_ERROR', err.message, null);
+    }
   }
-  if (error.message.includes('Required value missing for placeholder')) {
-    printError('TEMPLATE_PARSE_FAILED', error.message, null);
-  }
-  if (error.message.includes('missing subject') || error.message.includes('missing body') || error.message.includes('Unsupported placeholders')) {
-    printError('TEMPLATE_PARSE_FAILED', error.message, null);
-  }
-  printError('UNHANDLED_ERROR', error.message, null);
-});
+}
+
+entrypoint();

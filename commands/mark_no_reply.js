@@ -44,6 +44,7 @@ const path = require('path');
 const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
 const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
 const { takeSnapshot, diffSummary, assertInvariants, generateProof } = require(path.join(__dirname, '../lib/proof.js'));
+const { sha256FileOrNull } = require(path.join(__dirname, '../lib/receipt.js'));
 
 const PIPELINE_FILE_DEFAULT = path.join(__dirname, '../state/pipeline.json');
 const CONFIG_FILE_DEFAULT = path.join(__dirname, '../config.json');
@@ -74,6 +75,7 @@ function parseArgs() {
     afterDays: null,
     dryRun: false,
     prove: false,
+    receiptPath: null,
     pipelinePath: PIPELINE_FILE_DEFAULT,
     configPath: CONFIG_FILE_DEFAULT
   };
@@ -91,6 +93,9 @@ function parseArgs() {
       result.dryRun = true;
     } else if (arg === '--prove') {
       result.prove = true;
+    } else if (arg === '--receipt' && args[i + 1]) {
+      result.receiptPath = args[i + 1];
+      i++;
     } else if (arg === '--pipeline' && args[i + 1]) {
       result.pipelinePath = args[i + 1];
       i++;
@@ -105,6 +110,7 @@ function parseArgs() {
 
 async function main() {
   const args = parseArgs();
+  const beforeHash = args.receiptPath ? sha256FileOrNull(args.pipelinePath) : null;
 
   // Validate required args
   if (!args.now) {
@@ -272,6 +278,32 @@ async function main() {
     updates,
     _proof: proofOutput
   };
+
+  // Write receipt if requested
+  if (args.receiptPath) {
+    const afterHash = sha256FileOrNull(args.pipelinePath);
+    const receipt = {
+      ok: true,
+      command: 'mark_no_reply',
+      args: { now: args.now, after_days: args.afterDays, dry_run: args.dryRun, prove: args.prove, pipeline_path: args.pipelinePath, config_path: args.configPath },
+      touched_files: [
+        {
+          path: args.pipelinePath,
+          sha256_before: beforeHash,
+          sha256_after: afterHash
+        }
+      ],
+      stdout_json: output
+    };
+
+    try {
+      const tempPath = `${args.receiptPath}.tmp`;
+      fs.writeFileSync(tempPath, JSON.stringify(receipt, null, 2), 'utf-8');
+      fs.renameSync(tempPath, args.receiptPath);
+    } catch (receiptError) {
+      console.error(`[Receipt write failed: ${receiptError.message}]`);
+    }
+  }
 
   printOk(output);
   process.exit(0);

@@ -27,6 +27,39 @@ const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
 const { runPreflight } = require(path.join(__dirname, '../lib/preflight.js'));
 const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
 const { takeSnapshot, diffSummary, assertInvariants, generateProof } = require(path.join(__dirname, '../lib/proof.js'));
+const { sha256FileOrNull } = require(path.join(__dirname, '../lib/receipt.js'));
+
+/**
+ * Write receipt and then print output
+ */
+function printWithReceipt(output, receiptPath, commandName, args, beforeHash) {
+  if (receiptPath) {
+    const afterHash = sha256FileOrNull(PIPELINE_FILE);
+    const receipt = {
+      ok: true,
+      command: commandName,
+      args: args,
+      touched_files: [
+        {
+          path: PIPELINE_FILE,
+          sha256_before: beforeHash || null,
+          sha256_after: afterHash
+        }
+      ],
+      stdout_json: output
+    };
+
+    try {
+      const tempPath = `${receiptPath}.tmp`;
+      fs.writeFileSync(tempPath, JSON.stringify(receipt, null, 2), 'utf-8');
+      fs.renameSync(tempPath, receiptPath);
+    } catch (receiptError) {
+      console.error(`[Receipt write failed: ${receiptError.message}]`);
+    }
+  }
+
+  printOk(output);
+}
 
 // Pipeline state file
 const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
@@ -274,7 +307,7 @@ async function processLead(lead, mode, config, dryRun, checkEnv) {
  */
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { leadId: null, all: false, mode: 'simulate', dryRun: false, checkEnv: false, prove: false, preflightOnly: false };
+  const result = { leadId: null, all: false, mode: 'simulate', dryRun: false, checkEnv: false, prove: false, preflightOnly: false, receiptPath: null };
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--lead' && args[i + 1]) {
@@ -293,6 +326,9 @@ function parseArgs() {
       result.prove = true;
     } else if (args[i] === '--preflight-only') {
       result.preflightOnly = true;
+    } else if (args[i] === '--receipt' && args[i + 1]) {
+      result.receiptPath = args[i + 1];
+      i++;
     }
   }
 
@@ -309,12 +345,22 @@ function parseArgs() {
 }
 
 async function main() {
+  const args = parseArgs();
+  const beforeHash = args.receiptPath ? sha256FileOrNull(PIPELINE_FILE) : null;
+
   // Load environment variables from .env file deterministically
   loadEnvFileIfPresent(path.join(__dirname, '..', '.env'));
 
   const config = loadConfig();
   const pipeline = loadPipeline();
-  const args = parseArgs();
+
+  // Helper to attach before hash and print with receipt
+  const printResult = (output) => {
+    if (beforeHash !== null) {
+      output._beforeHash = beforeHash;
+    }
+    return printWithReceipt(output, args.receiptPath, 'send', args, beforeHash);
+  };
 
   // Handle --check-env mode: only check env presence and exit
   if (args.checkEnv) {
@@ -332,7 +378,7 @@ async function main() {
       presence[key] = process.env[key] !== undefined ? 'PRESENT' : 'MISSING';
     }
 
-    console.log(JSON.stringify(presence, null, 2));
+    printResult({ presence });
     process.exit(0);
   }
 
@@ -413,7 +459,7 @@ async function main() {
     console.error(`  Simulated: ${simulated}`);
     console.error(`  Failed: ${failed}`);
 
-    printOk({
+    printResult({
       processed: results.length,
       sent,
       simulated,
@@ -442,7 +488,7 @@ async function main() {
 
     // Handle --preflight-only mode: return preflight result without sending or mutating state
     if (args.preflightOnly) {
-      printOk(preflightResult);
+      printResult({ ...preflightResult, _beforeHash: beforeHash });
       process.exit(0);
     }
 
@@ -520,7 +566,7 @@ async function main() {
       });
     }
 
-    printOk(output);
+    printResult(output);
   } else {
     printError('INVALID_ARGS', 'Missing required arguments: --lead <id> or --all', {
       usage: 'voila/send --lead <id> OR voila/send --all [--mode <mode>] [--dry-run]',
