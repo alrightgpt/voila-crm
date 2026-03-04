@@ -23,7 +23,7 @@ const path = require('path');
 const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
 const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
 const { takeSnapshot, diffSummary, assertInvariants, generateProof } = require(path.join(__dirname, '../lib/proof.js'));
-const { sha256FileOrNull } = require(path.join(__dirname, '../lib/receipt.js'));
+const { withReceipt } = require(path.join(__dirname, '../lib/receipt.js'));
 
 // Pipeline state file
 const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
@@ -74,116 +74,116 @@ function parseArgs() {
   return result;
 }
 
-async function main() {
-  const args = parseArgs();
-  const beforeHash = args.receiptPath ? sha256FileOrNull(PIPELINE_FILE) : null;
-
-  if (!args.leadId) {
-    printError('INVALID_ARGS', 'Missing required argument: --lead <id>', {
-      usage: 'voila/mark_replied --lead <id> --reply-message-id <id> --in-reply-to <id>',
-      example: 'voila/mark_replied --lead abc-123-def --reply-message-id <some-message-id> --in-reply-to <outbound-message-id>'
-    });
+async function execute({ leadId, replyMessageId, inReplyTo, prove }) {
+  // Validate required args
+  if (!leadId) {
+    throw new Error('Missing required argument: --lead <id>');
   }
 
-  if (!args.replyMessageId || args.replyMessageId.trim() === '') {
-    printError('INVALID_ARGS', 'Missing required argument: --reply-message-id <id>', {
-      usage: 'voila/mark_replied --lead <id> --reply-message-id <id> --in-reply-to <id>',
-      example: 'voila/mark_replied --lead abc-123-def --reply-message-id <some-message-id> --in-reply-to <outbound-message-id>'
-    });
+  if (!replyMessageId || replyMessageId.trim() === '') {
+    throw new Error('Missing required argument: --reply-message-id <id>');
   }
 
-  if (!args.inReplyTo || args.inReplyTo.trim() === '') {
-    printError('INVALID_ARGS', 'Missing required argument: --in-reply-to <id>', {
-      usage: 'voila/mark_replied --lead <id> --reply-message-id <id> --in-reply-to <id>',
-      example: 'voila/mark_replied --lead abc-123-def --reply-message-id <some-message-id> --in-reply-to <outbound-message-id>'
-    });
+  if (!inReplyTo || inReplyTo.trim() === '') {
+    throw new Error('Missing required argument: --in-reply-to <id>');
   }
 
   const pipeline = loadPipeline();
 
   // Proof mode: take before snapshot
-  const before = args.prove ? takeSnapshot({
-    leadId: args.leadId,
+  const before = prove ? takeSnapshot({
+    leadId: leadId,
     pipelinePath: PIPELINE_FILE,
     configPath: path.join(__dirname, '..', 'config.json')
   }) : null;
 
-  const leadIndex = pipeline.leads.findIndex(l => l.id === args.leadId);
+  const leadIndex = pipeline.leads.findIndex(l => l.id === leadId);
 
   if (leadIndex === -1) {
-    printError('LEAD_NOT_FOUND', `Lead not found: ${args.leadId}`, {
-      lead_id: args.leadId,
-      proof: args.prove ? generateProof({
+    const error = new Error(`Lead not found: ${leadId}`);
+    error.details = { lead_id: leadId };
+    if (prove) {
+      error.details.proof = generateProof({
         before,
         after: takeSnapshot({
-          leadId: args.leadId,
+          leadId: leadId,
           pipelinePath: PIPELINE_FILE,
           configPath: path.join(__dirname, '..', 'config.json')
         }),
         diffSummary,
         assertInvariants
-      }) : undefined
-    });
+      });
+    }
+    throw error;
   }
 
   const lead = pipeline.leads[leadIndex];
 
   // Validate in-reply-to linkage
-  if (args.inReplyTo !== null && args.inReplyTo.trim() !== '') {
+  if (inReplyTo !== null && inReplyTo.trim() !== '') {
     if (!lead.send_status || !lead.send_status.message_id || lead.send_status.message_id.trim() === '') {
-      printError('INVALID_STATE', 'No outbound message ID found for this lead', {
-        lead_id: args.leadId,
+      const error = new Error('No outbound message ID found for this lead');
+      error.code = 'INVALID_STATE';
+      error.details = {
+        lead_id: leadId,
         expected_outbound_message_id: null,
-        provided_in_reply_to: args.inReplyTo,
-        proof: args.prove ? generateProof({
+        provided_in_reply_to: inReplyTo,
+        proof: prove ? generateProof({
           before,
           after: takeSnapshot({
-            leadId: args.leadId,
+            leadId: leadId,
             pipelinePath: PIPELINE_FILE,
             configPath: path.join(__dirname, '..', 'config.json')
           }),
           diffSummary,
           assertInvariants
         }) : undefined
-      });
+      };
+      throw error;
     }
 
-    if (lead.send_status.message_id !== args.inReplyTo) {
-      printError('INVALID_STATE', 'In-reply-to does not match outbound message ID', {
-        lead_id: args.leadId,
+    if (lead.send_status.message_id !== inReplyTo) {
+      const error = new Error('In-reply-to does not match outbound message ID');
+      error.code = 'INVALID_STATE';
+      error.details = {
+        lead_id: leadId,
         current_state: lead.state,
         expected_outbound_message_id: lead.send_status.message_id,
-        provided_in_reply_to: args.inReplyTo,
-        proof: args.prove ? generateProof({
+        provided_in_reply_to: inReplyTo,
+        proof: prove ? generateProof({
           before,
           after: takeSnapshot({
-            leadId: args.leadId,
+            leadId: leadId,
             pipelinePath: PIPELINE_FILE,
             configPath: path.join(__dirname, '..', 'config.json')
           }),
           diffSummary,
           assertInvariants
         }) : undefined
-      });
+      };
+      throw error;
     }
   }
 
   if (lead.state !== 'SENT') {
-    printError('INVALID_STATE', 'Lead must be in SENT state to mark as replied', {
-      lead_id: args.leadId,
+    const error = new Error('Lead must be in SENT state to mark as replied');
+    error.code = 'INVALID_STATE';
+    error.details = {
+      lead_id: leadId,
       current_state: lead.state,
       required_state: 'SENT',
-      proof: args.prove ? generateProof({
+      proof: prove ? generateProof({
         before,
         after: takeSnapshot({
-          leadId: args.leadId,
+          leadId: leadId,
           pipelinePath: PIPELINE_FILE,
           configPath: path.join(__dirname, '..', 'config.json')
         }),
         diffSummary,
         assertInvariants
       }) : undefined
-    });
+    };
+    throw error;
   }
 
   console.error('Voilà: Marking lead as replied...');
@@ -194,9 +194,9 @@ async function main() {
   // Transition to REPLIED state
   const repliedLead = transition(lead, 'REPLIED');
   repliedLead.replied_at = new Date().toISOString();
-  repliedLead.reply_message_id = args.replyMessageId;
-  if (args.inReplyTo) {
-    repliedLead.in_reply_to = args.inReplyTo;
+  repliedLead.reply_message_id = replyMessageId;
+  if (inReplyTo) {
+    repliedLead.in_reply_to = inReplyTo;
   }
 
   // Update pipeline
@@ -210,12 +210,12 @@ async function main() {
     previous_state: previousState,
     new_state: repliedLead.state,
     replied_at: repliedLead.replied_at,
-    reply_message_id: args.replyMessageId
+    reply_message_id: replyMessageId
   };
 
-  if (args.prove) {
+  if (prove) {
     const after = takeSnapshot({
-      leadId: args.leadId,
+      leadId: leadId,
       pipelinePath: PIPELINE_FILE,
       configPath: path.join(__dirname, '..', 'config.json')
     });
@@ -227,37 +227,53 @@ async function main() {
     });
   }
 
-  // Write receipt if requested
-  if (args.receiptPath) {
-    const afterHash = sha256FileOrNull(PIPELINE_FILE);
-    const receipt = {
-      ok: true,
-      command: 'mark_replied',
-      args: { lead_id: args.leadId, reply_message_id: args.replyMessageId, in_reply_to: args.inReplyTo, prove: args.prove },
-      touched_files: [
-        {
-          path: PIPELINE_FILE,
-          sha256_before: beforeHash,
-          sha256_after: afterHash
-        }
-      ],
-      stdout_json: output
-    };
-
-    try {
-      const tempPath = `${args.receiptPath}.tmp`;
-      fs.writeFileSync(tempPath, JSON.stringify(receipt, null, 2), 'utf-8');
-      fs.renameSync(tempPath, args.receiptPath);
-    } catch (receiptError) {
-      console.error(`[Receipt write failed: ${receiptError.message}]`);
-    }
-  }
-
-  printOk(output);
-
-  process.exit(0);
+  return output;
 }
 
-main().catch(error => {
-  printError('UNHANDLED_ERROR', error.message, null);
-});
+// Entry point with receipt wrapping
+async function entrypoint() {
+  try {
+    const args = parseArgs();
+
+    const stdoutObj = await withReceipt({
+      receiptPath: args.receiptPath,
+      commandName: 'mark_replied',
+      args: {
+        lead_id: args.leadId,
+        reply_message_id: args.replyMessageId,
+        in_reply_to: args.inReplyTo,
+        prove: args.prove
+      },
+      touchedPaths: [PIPELINE_FILE]
+    }, () => execute(args));
+
+    printOk(stdoutObj);
+    process.exit(0);
+  } catch (err) {
+    // Map specific errors
+    if (err.message === 'Missing required argument: --lead <id>') {
+      printError('INVALID_ARGS', err.message, {
+        usage: 'voila/mark_replied --lead <id> --reply-message-id <id> --in-reply-to <id>',
+        example: 'voila/mark_replied --lead abc-123-def --reply-message-id <some-message-id> --in-reply-to <outbound-message-id>'
+      });
+    } else if (err.message === 'Missing required argument: --reply-message-id <id>') {
+      printError('INVALID_ARGS', err.message, {
+        usage: 'voila/mark_replied --lead <id> --reply-message-id <id> --in-reply-to <id>',
+        example: 'voila/mark_replied --lead abc-123-def --reply-message-id <some-message-id> --in-reply-to <outbound-message-id>'
+      });
+    } else if (err.message === 'Missing required argument: --in-reply-to <id>') {
+      printError('INVALID_ARGS', err.message, {
+        usage: 'voila/mark_replied --lead <id> --reply-message-id <id> --in-reply-to <id>',
+        example: 'voila/mark_replied --lead abc-123-def --reply-message-id <some-message-id> --in-reply-to <outbound-message-id>'
+      });
+    } else if (err.message.startsWith('Lead not found:')) {
+      printError('LEAD_NOT_FOUND', err.message, err.details);
+    } else if (err.code === 'INVALID_STATE') {
+      printError('INVALID_STATE', err.message, err.details);
+    } else {
+      printError('UNHANDLED_ERROR', err.message, null);
+    }
+  }
+}
+
+entrypoint();

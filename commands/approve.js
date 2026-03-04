@@ -21,7 +21,7 @@ const path = require('path');
 const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
 const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
 const { takeSnapshot, diffSummary, assertInvariants, generateProof } = require(path.join(__dirname, '../lib/proof.js'));
-const { sha256FileOrNull } = require(path.join(__dirname, '../lib/receipt.js'));
+const { withReceipt } = require(path.join(__dirname, '../lib/receipt.js'));
 
 // Pipeline state file
 const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
@@ -66,84 +66,87 @@ function parseArgs() {
   return result;
 }
 
-async function main() {
-  const args = parseArgs();
-
-  if (!args.leadId) {
-    printError('INVALID_ARGS', 'Missing required argument: --lead <id>', {
-      usage: 'voila/approve --lead <id>',
-      example: 'voila/approve --lead abc-123-def'
-    });
+async function execute({ leadId, prove, receiptPath }) {
+  // Validate required args
+  if (!leadId) {
+    throw new Error('Missing required argument: --lead <id>');
   }
 
-  const beforeHash = args.receiptPath ? sha256FileOrNull(PIPELINE_FILE) : null;
   const pipeline = loadPipeline();
 
   // Proof mode: take before snapshot
-  const before = args.prove ? takeSnapshot({
-    leadId: args.leadId,
+  const before = prove ? takeSnapshot({
+    leadId: leadId,
     pipelinePath: PIPELINE_FILE,
     configPath: path.join(__dirname, '..', 'config.json')
   }) : null;
 
-  const leadIndex = pipeline.leads.findIndex(l => l.id === args.leadId);
+  const leadIndex = pipeline.leads.findIndex(l => l.id === leadId);
 
   if (leadIndex === -1) {
-    printError('LEAD_NOT_FOUND', `Lead not found: ${args.leadId}`, {
-      lead_id: args.leadId,
-      proof: args.prove ? generateProof({
+    const error = new Error(`Lead not found: ${leadId}`);
+    error.details = { lead_id: leadId };
+    if (prove) {
+      error.details.proof = generateProof({
         before,
         after: takeSnapshot({
-          leadId: args.leadId,
+          leadId: leadId,
           pipelinePath: PIPELINE_FILE,
           configPath: path.join(__dirname, '..', 'config.json')
         }),
         diffSummary,
         assertInvariants
-      }) : undefined
-    });
+      });
+    }
+    throw error;
   }
 
   const lead = pipeline.leads[leadIndex];
 
   // Validate lead is in DRAFTED state
   if (lead.state !== 'DRAFTED') {
-    printError('INVALID_STATE', 'Lead must be in DRAFTED state to approve', {
-      lead_id: args.leadId,
+    const error = new Error('Lead must be in DRAFTED state to approve');
+    error.code = 'INVALID_STATE';
+    error.details = {
+      lead_id: leadId,
       current_state: lead.state,
       required_state: 'DRAFTED',
-      proof: args.prove ? generateProof({
+      proof: prove ? generateProof({
         before,
         after: takeSnapshot({
-          leadId: args.leadId,
+          leadId: leadId,
           pipelinePath: PIPELINE_FILE,
           configPath: path.join(__dirname, '..', 'config.json')
         }),
         diffSummary,
         assertInvariants
       }) : undefined
-    });
+    };
+    throw error;
   }
 
   // Validate lead has a draft
   if (!lead.draft) {
-    printError('DRAFT_MISSING', 'Lead must have a draft to approve', {
-      lead_id: args.leadId,
-      proof: args.prove ? generateProof({
+    const error = new Error('Lead must have a draft to approve');
+    error.code = 'DRAFT_MISSING';
+    error.details = {
+      lead_id: leadId,
+      proof: prove ? generateProof({
         before,
         after: takeSnapshot({
-          leadId: args.leadId,
+          leadId: leadId,
           pipelinePath: PIPELINE_FILE,
           configPath: path.join(__dirname, '..', 'config.json')
         }),
         diffSummary,
         assertInvariants
       }) : undefined
-    });
+    };
+    throw error;
   }
 
   console.error('Voilà: Approving lead for sending...');
-  console.error(`Approving lead: ${args.leadId}`);
+  console.error(`Approving lead: ${leadId}`);
 
   const previousState = lead.state;
 
@@ -164,9 +167,9 @@ async function main() {
     approved_at: approvedLead.approved_at
   };
 
-  if (args.prove) {
+  if (prove) {
     const after = takeSnapshot({
-      leadId: args.leadId,
+      leadId: leadId,
       pipelinePath: PIPELINE_FILE,
       configPath: path.join(__dirname, '..', 'config.json')
     });
@@ -178,37 +181,40 @@ async function main() {
     });
   }
 
-  // Write receipt if requested
-  if (args.receiptPath) {
-    const afterHash = sha256FileOrNull(PIPELINE_FILE);
-    const receipt = {
-      ok: true,
-      command: 'approve',
-      args: { lead_id: args.leadId, prove: args.prove },
-      touched_files: [
-        {
-          path: PIPELINE_FILE,
-          sha256_before: beforeHash,
-          sha256_after: afterHash
-        }
-      ],
-      stdout_json: output
-    };
-
-    try {
-      const tempPath = `${args.receiptPath}.tmp`;
-      fs.writeFileSync(tempPath, JSON.stringify(receipt, null, 2), 'utf-8');
-      fs.renameSync(tempPath, args.receiptPath);
-    } catch (receiptError) {
-      console.error(`[Receipt write failed: ${receiptError.message}]`);
-    }
-  }
-
-  printOk(output);
-
-  process.exit(0);
+  return output;
 }
 
-main().catch(error => {
-  printError('UNHANDLED_ERROR', error.message, null);
-});
+// Entry point with receipt wrapping
+async function entrypoint() {
+  try {
+    const args = parseArgs();
+
+    const stdoutObj = await withReceipt({
+      receiptPath: args.receiptPath,
+      commandName: 'approve',
+      args: { lead_id: args.leadId, prove: args.prove },
+      touchedPaths: [PIPELINE_FILE]
+    }, () => execute(args));
+
+    printOk(stdoutObj);
+    process.exit(0);
+  } catch (err) {
+    // Map specific errors
+    if (err.message === 'Missing required argument: --lead <id>') {
+      printError('INVALID_ARGS', err.message, {
+        usage: 'voila/approve --lead <id>',
+        example: 'voila/approve --lead abc-123-def'
+      });
+    } else if (err.message === 'Lead not found:') {
+      printError('LEAD_NOT_FOUND', err.message, err.details);
+    } else if (err.code === 'INVALID_STATE') {
+      printError('INVALID_STATE', err.message, err.details);
+    } else if (err.code === 'DRAFT_MISSING') {
+      printError('DRAFT_MISSING', err.message, err.details);
+    } else {
+      printError('UNHANDLED_ERROR', err.message, null);
+    }
+  }
+}
+
+entrypoint();

@@ -44,7 +44,7 @@ const path = require('path');
 const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
 const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
 const { takeSnapshot, diffSummary, assertInvariants, generateProof } = require(path.join(__dirname, '../lib/proof.js'));
-const { sha256FileOrNull } = require(path.join(__dirname, '../lib/receipt.js'));
+const { withReceipt } = require(path.join(__dirname, '../lib/receipt.js'));
 
 const PIPELINE_FILE_DEFAULT = path.join(__dirname, '../state/pipeline.json');
 const CONFIG_FILE_DEFAULT = path.join(__dirname, '../config.json');
@@ -108,42 +108,30 @@ function parseArgs() {
   return result;
 }
 
-async function main() {
-  const args = parseArgs();
-  const beforeHash = args.receiptPath ? sha256FileOrNull(args.pipelinePath) : null;
-
+async function execute({ now, afterDays, dryRun, prove, pipelinePath, configPath }) {
   // Validate required args
-  if (!args.now) {
-    printError('INVALID_ARGS', 'Missing required argument: --now <ISO8601>', {
-      usage: 'voila/mark_no_reply --now <ISO8601> --after-days <int> [--dry-run] [--prove] [--pipeline <path>] [--config <path>]',
-      examples: [
-        'voila/mark_no_reply --now 2026-03-03T09:00:00.000Z --after-days 3',
-        'voila/mark_no_reply --now 2026-03-03T09:00:00.000Z --after-days 3 --dry-run',
-        'voila/mark_no_reply --now 2026-03-03T09:00:00.000Z --after-days 3 --prove'
-      ]
-    });
+  if (!now) {
+    throw new Error('Missing required argument: --now <ISO8601>');
   }
 
-  if (args.afterDays === null) {
-    printError('INVALID_ARGS', 'Missing required argument: --after-days <int>', {
-      usage: 'voila/mark_no_reply --now <ISO8601> --after-days <int> [--dry-run] [--prove] [--pipeline <path>] [--config <path>]'
-    });
+  if (afterDays === null) {
+    throw new Error('Missing required argument: --after-days <int>');
   }
 
   // Validate --now is valid ISO8601
-  const nowMs = Date.parse(args.now);
+  const nowMs = Date.parse(now);
   if (isNaN(nowMs)) {
-    printError('INVALID_ARGS', 'Invalid --now timestamp: must be valid ISO8601 format', {
-      now: args.now
-    });
+    const error = new Error('Invalid --now timestamp: must be valid ISO8601 format');
+    error.details = { now };
+    throw error;
   }
 
   // Validate --after-days is valid integer >= 0
-  const afterDaysInt = parseInt(args.afterDays, 10);
+  const afterDaysInt = parseInt(afterDays, 10);
   if (isNaN(afterDaysInt) || afterDaysInt < 0) {
-    printError('INVALID_ARGS', 'Invalid --after-days: must be integer >= 0', {
-      after_days: args.afterDays
-    });
+    const error = new Error('Invalid --after-days: must be integer >= 0');
+    error.details = { after_days: afterDays };
+    throw error;
   }
 
   // Calculate cutoff timestamp
@@ -151,16 +139,16 @@ async function main() {
   const cutoffIso = new Date(cutoffMs).toISOString();
 
   // Load pipeline and config
-  const pipeline = loadPipeline(args.pipelinePath);
-  const config = loadConfig(args.configPath);
+  const pipeline = loadPipeline(pipelinePath);
+  const config = loadConfig(configPath);
 
   // Take before snapshot if --prove
   let beforeSnapshot = null;
-  if (args.prove) {
+  if (prove) {
     beforeSnapshot = takeSnapshot({
       leadId: null,
-      pipelinePath: args.pipelinePath,
-      configPath: args.configPath
+      pipelinePath: pipelinePath,
+      configPath: configPath
     });
   }
 
@@ -178,83 +166,84 @@ async function main() {
     const lead = pipeline.leads[i];
     processed++;
 
-    // Skip if already NO_REPLY
-    if (lead.state === 'NO_REPLY') {
-      alreadyNoReply++;
-      continue;
-    }
-
-    // Skip if not in SENT state
+    // Skip leads not in SENT state
     if (lead.state !== 'SENT') {
-      skippedNotSent++;
+      if (lead.state === 'NO_REPLY') {
+        alreadyNoReply++;
+      } else {
+        skippedNotSent++;
+      }
       continue;
     }
 
-    // Determine sent_at timestamp
-    const sentAt = lead.send_status?.sent_at || lead.sent_at || null;
-
-    // Skip if sent_at is missing or invalid
-    if (!sentAt || isNaN(Date.parse(sentAt))) {
+    // Skip leads without sent_at
+    if (!lead.sent_at) {
       skippedMissingSentAt++;
       continue;
     }
 
-    const sentAtMs = Date.parse(sentAt);
+    // Calculate sent timestamp
+    const sentMs = Date.parse(lead.sent_at);
+    if (isNaN(sentMs)) {
+      skippedMissingSentAt++;
+      continue;
+    }
 
-    // Check if eligible (sent_at <= cutoff)
-    if (sentAtMs <= cutoffMs) {
+    // Check if sent before cutoff
+    if (sentMs < cutoffMs) {
       eligible++;
 
-      if (args.dryRun) {
-        // Dry run: record would-transition but don't mutate
-        updates.push({
-          lead_id: lead.id,
-          from: 'SENT',
-          to: 'NO_REPLY',
-          sent_at: sentAt,
-          reason: 'older_than_cutoff',
-          would_write: false
-        });
-      } else {
-        // Real run: transition and update
-        const transitioned = transition(lead, 'NO_REPLY');
-        transitioned.no_reply_status = {
-          marked_at: args.now,
-          cutoff: cutoffIso,
-          after_days: afterDaysInt,
-          sent_at: sentAt
-        };
+      const update = {
+        lead_id: lead.id,
+        from: lead.state,
+        to: 'NO_REPLY',
+        sent_at: lead.sent_at,
+        reason: 'older_than_cutoff',
+        would_write: !dryRun
+      };
 
-        pipeline.leads[i] = transitioned;
+      // Apply transition if not dry run
+      if (!dryRun) {
+        const noReplyLead = transition(lead, 'NO_REPLY');
+        noReplyLead.no_reply_at = now;
+        noReplyLead.no_reply_cutoff = cutoffIso;
+        pipeline.leads[i] = noReplyLead;
         updated++;
-
-        updates.push({
-          lead_id: lead.id,
-          from: 'SENT',
-          to: 'NO_REPLY',
-          sent_at: sentAt,
-          reason: 'older_than_cutoff',
-          would_write: true
-        });
       }
+
+      updates.push(update);
     }
   }
 
-  // Write pipeline only if not dry-run and we have updates
-  if (!args.dryRun && updated > 0) {
-    savePipeline(pipeline, args.pipelinePath, args.now);
+  // Save pipeline if not dry run and there were updates
+  if (!dryRun && updated > 0) {
+    savePipeline(pipeline, pipelinePath, now);
   }
 
-  // Generate proof if requested
-  let proofOutput = undefined;
-  if (args.prove) {
+  console.error('Voilà: Marking leads as no-reply...');
+
+  const output = {
+    now: now,
+    after_days: afterDaysInt,
+    cutoff: cutoffIso,
+    dry_run: dryRun,
+    processed: processed,
+    eligible: eligible,
+    updated: updated,
+    already_no_reply: alreadyNoReply,
+    skipped_not_sent: skippedNotSent,
+    skipped_missing_sent_at: skippedMissingSentAt,
+    updates: updates
+  };
+
+  if (prove) {
     const afterSnapshot = takeSnapshot({
       leadId: null,
-      pipelinePath: args.pipelinePath,
-      configPath: args.configPath
+      pipelinePath: pipelinePath,
+      configPath: configPath
     });
 
-    proofOutput = generateProof({
+    output._proof = generateProof({
       before: beforeSnapshot,
       after: afterSnapshot,
       diffSummary,
@@ -262,53 +251,53 @@ async function main() {
     });
   }
 
-  // Output success JSON
-  const output = {
-    ok: true,
-    now: args.now,
-    after_days: afterDaysInt,
-    cutoff: cutoffIso,
-    dry_run: args.dryRun,
-    processed,
-    eligible,
-    updated,
-    already_no_reply: alreadyNoReply,
-    skipped_not_sent: skippedNotSent,
-    skipped_missing_sent_at: skippedMissingSentAt,
-    updates,
-    _proof: proofOutput
-  };
-
-  // Write receipt if requested
-  if (args.receiptPath) {
-    const afterHash = sha256FileOrNull(args.pipelinePath);
-    const receipt = {
-      ok: true,
-      command: 'mark_no_reply',
-      args: { now: args.now, after_days: args.afterDays, dry_run: args.dryRun, prove: args.prove, pipeline_path: args.pipelinePath, config_path: args.configPath },
-      touched_files: [
-        {
-          path: args.pipelinePath,
-          sha256_before: beforeHash,
-          sha256_after: afterHash
-        }
-      ],
-      stdout_json: output
-    };
-
-    try {
-      const tempPath = `${args.receiptPath}.tmp`;
-      fs.writeFileSync(tempPath, JSON.stringify(receipt, null, 2), 'utf-8');
-      fs.renameSync(tempPath, args.receiptPath);
-    } catch (receiptError) {
-      console.error(`[Receipt write failed: ${receiptError.message}]`);
-    }
-  }
-
-  printOk(output);
-  process.exit(0);
+  return output;
 }
 
-main().catch(error => {
-  printError('UNHANDLED_ERROR', error.message, null);
-});
+// Entry point with receipt wrapping
+async function entrypoint() {
+  try {
+    const parsedArgs = parseArgs();
+
+    const stdoutObj = await withReceipt({
+      receiptPath: parsedArgs.receiptPath,
+      commandName: 'mark_no_reply',
+      args: {
+        now: parsedArgs.now,
+        after_days: parsedArgs.afterDays,
+        dry_run: parsedArgs.dryRun,
+        prove: parsedArgs.prove,
+        pipeline_path: parsedArgs.pipelinePath,
+        config_path: parsedArgs.configPath
+      },
+      touchedPaths: [parsedArgs.pipelinePath]
+    }, () => execute(parsedArgs));
+
+    printOk(stdoutObj);
+    process.exit(0);
+  } catch (err) {
+    // Map specific errors
+    if (err.message === 'Missing required argument: --now <ISO8601>') {
+      printError('INVALID_ARGS', err.message, {
+        usage: 'voila/mark_no_reply --now <ISO8601> --after-days <int> [--dry-run] [--prove] [--pipeline <path>] [--config <path>]',
+        examples: [
+          'voila/mark_no_reply --now 2026-03-03T09:00:00.000Z --after-days 3',
+          'voila/mark_no_reply --now 2026-03-03T09:00:00.000Z --after-days 3 --dry-run',
+          'voila/mark_no_reply --now 2026-03-03T09:00:00.000Z --after-days 3 --prove'
+        ]
+      });
+    } else if (err.message === 'Missing required argument: --after-days <int>') {
+      printError('INVALID_ARGS', err.message, {
+        usage: 'voila/mark_no_reply --now <ISO8601> --after-days <int> [--dry-run] [--prove] [--pipeline <path>] [--config <path>]'
+      });
+    } else if (err.message === 'Invalid --now timestamp: must be valid ISO8601 format') {
+      printError('INVALID_ARGS', err.message, err.details);
+    } else if (err.message === 'Invalid --after-days: must be integer >= 0') {
+      printError('INVALID_ARGS', err.message, err.details);
+    } else {
+      printError('UNHANDLED_ERROR', err.message, null);
+    }
+  }
+}
+
+entrypoint();

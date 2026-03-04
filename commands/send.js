@@ -27,7 +27,7 @@ const { transition } = require(path.join(__dirname, '../lib/state-machine.js'));
 const { runPreflight } = require(path.join(__dirname, '../lib/preflight.js'));
 const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
 const { takeSnapshot, diffSummary, assertInvariants, generateProof } = require(path.join(__dirname, '../lib/proof.js'));
-const { sha256FileOrNull } = require(path.join(__dirname, '../lib/receipt.js'));
+const { sha256FileOrNull, withReceipt } = require(path.join(__dirname, '../lib/receipt.js'));
 
 /**
  * Write receipt and then print output
@@ -586,6 +586,58 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(error => {
-  printError('UNHANDLED_ERROR', error.message, null);
-});
+// Entry point with receipt wrapping
+async function entrypoint() {
+  try {
+    const parsedArgs = parseArgs();
+
+    const stdoutObj = await withReceipt({
+      receiptPath: parsedArgs.receiptPath,
+      commandName: 'send',
+      args: {
+        lead_id: parsedArgs.leadId,
+        all: parsedArgs.all,
+        mode: parsedArgs.mode,
+        dry_run: parsedArgs.dryRun,
+        check_env: parsedArgs.checkEnv,
+        prove: parsedArgs.prove,
+        preflight_only: parsedArgs.preflightOnly
+      },
+      touchedPaths: [PIPELINE_FILE]
+    }, async () => {
+      // Validate basic args inside receipt wrapper
+      if (!parsedArgs.leadId && !parsedArgs.all) {
+        throw new Error('Missing required arguments: --lead <id> or --all');
+      }
+      return await main();
+    });
+
+    printOk(stdoutObj);
+    process.exit(0);
+  } catch (err) {
+    // Map specific errors
+    if (err.message.includes('Missing required environment variables')) {
+      printError('MISSING_ENV', err.message, null);
+    } else if (err.message.startsWith('Preflight check failed:')) {
+      printError('PREFLIGHT_FAILED', err.message.substring(24), null);
+    } else if (err.message === 'Missing required arguments: --lead <id> or --all') {
+      printError('INVALID_ARGS', err.message, {
+        usage: 'voila/send --lead <id> OR voila/send --all [--mode <mode>] [--dry-run]',
+        modes: {
+          simulate: 'Log what would be sent without sending (default)',
+          send_if_enabled: 'Send if config.send_enabled is true, otherwise simulate'
+        },
+        safety: 'Real sending is blocked unless: (1) mode=send_if_enabled AND (2) config.send_enabled=true',
+        examples: [
+          'voila/send --lead abc-123-def',
+          'voila/send --all --mode simulate',
+          'voila/send --all --mode send_if_enabled --dry-run'
+        ]
+      });
+    } else {
+      printError('UNHANDLED_ERROR', err.message, null);
+    }
+  }
+}
+
+entrypoint();
