@@ -79,17 +79,17 @@ echo ""
 # Test 3: Known commands are "invoked", report is "missing"
 echo "Test 3: Known commands invoked, report missing..."
 
-# Check intake is invoked
+# Check intake is invoked_help
 INTAKE_STATUS=$(echo "$OUTPUT" | jq -r '.steps[] | select(.name=="intake") | .status')
-if [ "$INTAKE_STATUS" != "invoked" ]; then
-    echo "FAIL: Expected intake status 'invoked', got '$INTAKE_STATUS'"
+if [ "$INTAKE_STATUS" != "invoked_help" ]; then
+    echo "FAIL: Expected intake status 'invoked_help', got '$INTAKE_STATUS'"
     exit 1
 fi
 
-# Check draft is invoked
+# Check draft is invoked_help
 DRAFT_STATUS=$(echo "$OUTPUT" | jq -r '.steps[] | select(.name=="draft") | .status')
-if [ "$DRAFT_STATUS" != "invoked" ]; then
-    echo "FAIL: Expected draft status 'invoked', got '$DRAFT_STATUS'"
+if [ "$DRAFT_STATUS" != "invoked_help" ]; then
+    echo "FAIL: Expected draft status 'invoked_help', got '$DRAFT_STATUS'"
     exit 1
 fi
 
@@ -110,8 +110,8 @@ for STEP_NAME in intake draft approve send detect_replies mark_no_reply; do
     
     # Check status
     STATUS=$(echo "$STEP_JSON" | jq -r '.status')
-    if [ "$STATUS" != "invoked" ]; then
-        echo "FAIL: $STEP_NAME status is not 'invoked'"
+    if [ "$STATUS" != "invoked_help" ]; then
+        echo "FAIL: $STEP_NAME status is not 'invoked_help'"
         exit 1
     fi
     

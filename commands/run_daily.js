@@ -1,21 +1,23 @@
 #!/usr/bin/env node
 
 /**
- * Voilà Run Daily Orchestrator - Phase 2A
+ * Voilà Run Daily Orchestrator - Phase 2B
  * Deterministic orchestrator for daily voila automation.
  *
- * Phase 2A: CLI runner + JSON aggregation (NO MUTATIONS)
- * - Invokes subcommands via --help (safe, non-mutating)
- * - Aggregates STRICT JSON outputs
- * - No pipeline state mutations in this commit
+ * Phase 2B: Execute framework (dry-run gated, skip unsafe)
+ * - --plan-only (default): invoke subcommands via --help (safe, non-mutating)
+ * - --execute: actually invoke subcommands, but ONLY if --dry-run is also set
+ * - Steps without dry-run support are skipped with status "skipped_unsafe"
  *
  * CLI:
- *   node commands/run_daily.js --now <ISO8601> [--mode <simulate|send_if_enabled>] [--dry-run]
+ *   node commands/run_daily.js --now <ISO8601> [--mode <simulate|send_if_enabled>] [--dry-run] [--plan-only|--execute]
  *
  * Arguments:
  *   --now <ISO8601>       REQUIRED: Current timestamp (deterministic, no Date.now())
  *   --mode <mode>         Optional: "simulate" (default) or "send_if_enabled"
  *   --dry-run             Optional: Flag (default: false)
+ *   --plan-only           Optional: Plan-only mode (default if --execute not set)
+ *   --execute             Optional: Execute mode (requires --dry-run for safety)
  *
  * Output (STRICT JSON to stdout):
  *   On success:
@@ -25,23 +27,25 @@
  *     "now": "<ISO8601 exactly as provided>",
  *     "mode": "simulate|send_if_enabled",
  *     "dry_run": true|false,
+ *     "plan_only": true|false,
  *     "steps": [
- *       { "name": "intake", "status": "invoked|missing", "cmd": ["node","commands/intake.js","--help"], "exit_code": 0, "ok_json_parse": true, "output_json": {...} }
+ *       {
+ *         "name": "send",
+ *         "status": "invoked_help|executed_dry_run|skipped_unsafe|missing",
+ *         "supports_dry_run": true|false|unknown,
+ *         "cmd": [...],
+ *         "exit_code": 0,
+ *         "ok_json_parse": true,
+ *         "output_json": {...},
+ *         "reason": "..." // only when skipped_unsafe
+ *       }
  *     ],
  *     "notes": [...]
  *   }
  *
- *   On error:
- *   {
- *     "ok": false,
- *     "code": "INVALID_ARGS",
- *     "message": "...",
- *     "details": { ... }
- *   }
- *
  * Exit codes:
  *   0 - success
- *   2 - invalid arguments
+ *   2 - invalid arguments (e.g., --execute without --dry-run)
  */
 
 const path = require('path');
@@ -50,14 +54,15 @@ const { spawnSync } = require('child_process');
 const { printOk, printError } = require(path.join(__dirname, '../lib/result.js'));
 
 // Fixed order of steps (deterministic)
+// supports_dry_run: determined by inspecting command source
 const STEP_DEFINITIONS = [
-  { name: 'intake', script: 'intake.js' },
-  { name: 'draft', script: 'draft.js' },
-  { name: 'approve', script: 'approve.js' },
-  { name: 'send', script: 'send.js' },
-  { name: 'detect_replies', script: 'detect_replies.js' },
-  { name: 'mark_no_reply', script: 'mark_no_reply.js' },
-  { name: 'report', script: null } // No script for report yet
+  { name: 'intake', script: 'intake.js', supports_dry_run: false },
+  { name: 'draft', script: 'draft.js', supports_dry_run: false },
+  { name: 'approve', script: 'approve.js', supports_dry_run: false },
+  { name: 'send', script: 'send.js', supports_dry_run: true },
+  { name: 'detect_replies', script: 'detect_replies.js', supports_dry_run: true },
+  { name: 'mark_no_reply', script: 'mark_no_reply.js', supports_dry_run: true },
+  { name: 'report', script: null, supports_dry_run: false } // No script for report yet
 ];
 
 const VALID_MODES = ['simulate', 'send_if_enabled'];
@@ -73,6 +78,8 @@ function parseArgs() {
     now: null,
     mode: DEFAULT_MODE,
     dryRun: false,
+    planOnly: true,  // Default to plan-only
+    execute: false,
     help: false
   };
 
@@ -87,6 +94,12 @@ function parseArgs() {
       i++;
     } else if (arg === '--dry-run') {
       result.dryRun = true;
+    } else if (arg === '--plan-only') {
+      result.planOnly = true;
+      result.execute = false;
+    } else if (arg === '--execute') {
+      result.execute = true;
+      result.planOnly = false;
     } else if (arg === '--help' || arg === '-h') {
       result.help = true;
     }
@@ -115,13 +128,19 @@ function printHelp() {
     ok: true,
     command: 'run_daily',
     help: {
-      description: 'Deterministic orchestrator for daily voila automation (phase 2a)',
-      usage: 'node commands/run_daily.js --now <ISO8601> [--mode <simulate|send_if_enabled>] [--dry-run]',
+      description: 'Deterministic orchestrator for daily voila automation (phase 2b)',
+      usage: 'node commands/run_daily.js --now <ISO8601> [--mode <simulate|send_if_enabled>] [--dry-run] [--plan-only|--execute]',
       arguments: [
         { name: '--now', required: true, description: 'Current timestamp in ISO8601 format', example: '2026-03-04T00:00:00Z' },
         { name: '--mode', required: false, default: 'simulate', options: VALID_MODES, description: 'Execution mode' },
         { name: '--dry-run', required: false, default: false, description: 'Dry run flag' },
+        { name: '--plan-only', required: false, default: true, description: 'Plan-only mode (invoke --help only)' },
+        { name: '--execute', required: false, description: 'Execute mode (requires --dry-run)' },
         { name: '--help', required: false, description: 'Print this help' }
+      ],
+      safety: [
+        '--execute requires --dry-run to prevent accidental mutations',
+        'Steps without dry-run support are skipped with status skipped_unsafe'
       ],
       exit_codes: [
         { code: 0, description: 'Success' },
@@ -185,20 +204,19 @@ function runNodeCommand(argsArray) {
 }
 
 /**
- * Invoke a subcommand with --help (safe, non-mutating)
- * For Phase 2A, we call --help to verify command exists and get its help output
+ * Invoke a step in plan-only mode (via --help)
  * 
- * @param {Object} stepDef - Step definition { name, script }
+ * @param {Object} stepDef - Step definition { name, script, supports_dry_run }
  * @returns {Object} Step result with invocation details
  */
-function invokeStepSafe(stepDef) {
+function invokeStepPlanOnly(stepDef) {
   const commandDir = path.join(__dirname);
   
   if (!stepDef.script) {
-    // No script defined for this step (e.g., report)
     return {
       name: stepDef.name,
       status: 'missing',
+      supports_dry_run: stepDef.supports_dry_run ? true : false,
       cmd: null,
       exit_code: null,
       ok_json_parse: false,
@@ -208,11 +226,11 @@ function invokeStepSafe(stepDef) {
 
   const scriptPath = path.join(commandDir, stepDef.script);
   
-  // Check if script exists
   if (!fs.existsSync(scriptPath)) {
     return {
       name: stepDef.name,
       status: 'missing',
+      supports_dry_run: 'unknown',
       cmd: null,
       exit_code: null,
       ok_json_parse: false,
@@ -220,15 +238,85 @@ function invokeStepSafe(stepDef) {
     };
   }
 
-  // Build command args array
+  // Build command args array (--help invocation)
   const cmdArgs = [scriptPath, '--help'];
-  
-  // Run the command
   const result = runNodeCommand(cmdArgs);
 
   return {
     name: stepDef.name,
-    status: 'invoked',
+    status: 'invoked_help',
+    supports_dry_run: stepDef.supports_dry_run,
+    cmd: [process.execPath, ...cmdArgs],
+    exit_code: result.exit_code,
+    ok_json_parse: result.ok_json_parse,
+    output_json: result.parsed_json
+  };
+}
+
+/**
+ * Invoke a step in execute mode (with --dry-run safety)
+ * 
+ * @param {Object} stepDef - Step definition { name, script, supports_dry_run }
+ * @param {Object} args - CLI arguments (for --now, etc.)
+ * @returns {Object} Step result with invocation details
+ */
+function invokeStepExecute(stepDef, args) {
+  const commandDir = path.join(__dirname);
+  
+  if (!stepDef.script) {
+    return {
+      name: stepDef.name,
+      status: 'missing',
+      supports_dry_run: stepDef.supports_dry_run ? true : false,
+      cmd: null,
+      exit_code: null,
+      ok_json_parse: false,
+      output_json: null
+    };
+  }
+
+  const scriptPath = path.join(commandDir, stepDef.script);
+  
+  if (!fs.existsSync(scriptPath)) {
+    return {
+      name: stepDef.name,
+      status: 'missing',
+      supports_dry_run: 'unknown',
+      cmd: null,
+      exit_code: null,
+      ok_json_parse: false,
+      output_json: null
+    };
+  }
+
+  // Check if step supports dry-run
+  if (!stepDef.supports_dry_run) {
+    return {
+      name: stepDef.name,
+      status: 'skipped_unsafe',
+      supports_dry_run: false,
+      cmd: null,
+      exit_code: null,
+      ok_json_parse: false,
+      output_json: null,
+      reason: 'Step does not support --dry-run; skipped for safety'
+    };
+  }
+
+  // Build command args array (actual invocation with --dry-run)
+  const cmdArgs = [scriptPath, '--now', args.now, '--dry-run'];
+  
+  // Add mode for send command
+  if (stepDef.name === 'send') {
+    cmdArgs.push('--mode', args.mode);
+  }
+
+  const result = runNodeCommand(cmdArgs);
+
+  return {
+    name: stepDef.name,
+    status: 'executed_dry_run',
+    supports_dry_run: true,
     cmd: [process.execPath, ...cmdArgs],
     exit_code: result.exit_code,
     ok_json_parse: result.ok_json_parse,
@@ -238,13 +326,21 @@ function invokeStepSafe(stepDef) {
 
 /**
  * Run all steps in fixed order (deterministic)
+ * @param {Object} args - CLI arguments
  * @returns {Object[]} Array of step results
  */
-function runAllSteps() {
+function runAllSteps(args) {
   const results = [];
   
   for (const stepDef of STEP_DEFINITIONS) {
-    const stepResult = invokeStepSafe(stepDef);
+    let stepResult;
+    
+    if (args.execute) {
+      stepResult = invokeStepExecute(stepDef, args);
+    } else {
+      stepResult = invokeStepPlanOnly(stepDef);
+    }
+    
     results.push(stepResult);
   }
   
@@ -268,7 +364,7 @@ function main() {
     fail(
       'INVALID_ARGS',
       'Missing required argument: --now <ISO8601>',
-      { missing: 'now', usage: 'node commands/run_daily.js --now <ISO8601> [--mode <simulate|send_if_enabled>] [--dry-run]' },
+      { missing: 'now', usage: 'node commands/run_daily.js --now <ISO8601> [--mode <simulate|send_if_enabled>] [--dry-run] [--plan-only|--execute]' },
       2
     );
   }
@@ -293,8 +389,21 @@ function main() {
     );
   }
 
-  // Run all steps (Phase 2A: safe --help invocations only)
-  const steps = runAllSteps();
+  // SAFETY: --execute requires --dry-run
+  if (args.execute && !args.dryRun) {
+    fail(
+      'INVALID_ARGS',
+      '--execute requires --dry-run for safety',
+      { 
+        reason: 'Execute mode without --dry-run would perform mutations',
+        suggestion: 'Add --dry-run to preview executions, or use --plan-only for safe planning'
+      },
+      2
+    );
+  }
+
+  // Run all steps
+  const steps = runAllSteps(args);
 
   // Build success output (deterministic, stable ordering)
   const output = {
@@ -302,11 +411,15 @@ function main() {
     now: args.now,
     mode: args.mode,
     dry_run: args.dryRun,
+    plan_only: args.planOnly,
     steps,
     notes: [
-      'Phase 2A: subcommands invoked via --help (no mutations)',
+      args.execute 
+        ? 'Phase 2B: execute mode with --dry-run safety gate' 
+        : 'Phase 2B: plan-only mode (--help invocations)',
       'Deterministic: --now is required',
-      'Fixed step order: intake, draft, approve, send, detect_replies, mark_no_reply, report'
+      'Fixed step order: intake, draft, approve, send, detect_replies, mark_no_reply, report',
+      'Steps without dry-run support are skipped with status skipped_unsafe'
     ]
   };
 
