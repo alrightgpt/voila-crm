@@ -1,0 +1,23 @@
+#!/bin/bash
+#
+# scripts/hooks/pre-commit
+# Git pre-commit hook that runs mutation budget check
+#
+
+set -euo pipefail
+
+echo "Running mutation budget check..."
+
+# Get repo root from git (works for both regular repos and submodules)
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+cd "$REPO_ROOT"
+
+node commands/check_mutation_budget.js \
+  --max-files 3 \
+  --max-lines 200 \
+  --deny-prefix templates/ \
+  --deny-prefix pipeline.json \
+  --deny-prefix PROJECT_STATE.md
+
+echo "Mutation budget OK"
