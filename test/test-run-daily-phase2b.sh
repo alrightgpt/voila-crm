@@ -90,10 +90,10 @@ if [ "$SEND_STATUS" != "executed_dry_run" ]; then
     exit 1
 fi
 
-# Check detect_replies is executed_dry_run (has dry-run support)
+# Check detect_replies is skipped_unsafe (needs --inbox-json)
 DETECT_STATUS=$(echo "$OUTPUT" | jq -r '.steps[] | select(.name=="detect_replies") | .status')
-if [ "$DETECT_STATUS" != "executed_dry_run" ]; then
-    echo "FAIL: Expected detect_replies status 'executed_dry_run', got '$DETECT_STATUS'"
+if [ "$DETECT_STATUS" != "skipped_unsafe" ]; then
+    echo "FAIL: Expected detect_replies status 'skipped_unsafe' (needs --inbox-json), got '$DETECT_STATUS'"
     exit 1
 fi
 

@@ -304,23 +304,47 @@ function invokeStepExecute(stepDef, args) {
   }
 
   // Build command args array (actual invocation with --dry-run)
-  const cmdArgs = [scriptPath, '--now', args.now, '--dry-run'];
+  // Phase 2C-2: Execute send step with --all --mode <mode> --dry-run
+  let cmdArgs;
   
-  // Add mode for send command
   if (stepDef.name === 'send') {
-    cmdArgs.push('--mode', args.mode);
+    // send.js args: --all --mode <mode> --dry-run (no --now needed)
+    cmdArgs = [scriptPath, '--all', '--mode', args.mode, '--dry-run'];
+  } else if (stepDef.name === 'detect_replies') {
+    // detect_replies.js needs --inbox-json and other args (skip for now)
+    return {
+      name: stepDef.name,
+      status: 'skipped_unsafe',
+      supports_dry_run: true,
+      cmd: null,
+      exit_code: null,
+      ok_json_parse: false,
+      output_json: null,
+      reason: 'detect_replies requires --inbox-json; not yet wired'
+    };
+  } else if (stepDef.name === 'mark_no_reply') {
+    // mark_no_reply.js needs --now and --after-days
+    cmdArgs = [scriptPath, '--now', args.now, '--dry-run'];
+  } else {
+    // Generic fallback
+    cmdArgs = [scriptPath, '--dry-run'];
   }
 
   const result = runNodeCommand(cmdArgs);
+
+  // Determine step status based on execution result
+  const stepOk = result.exit_code === 0 && result.ok_json_parse;
 
   return {
     name: stepDef.name,
     status: 'executed_dry_run',
     supports_dry_run: true,
+    ok: stepOk,
     cmd: [process.execPath, ...cmdArgs],
     exit_code: result.exit_code,
     ok_json_parse: result.ok_json_parse,
-    output_json: result.parsed_json
+    output_json: result.parsed_json,
+    error: stepOk ? null : (result.stderr || 'Command failed or returned non-JSON')
   };
 }
 
@@ -405,21 +429,36 @@ function main() {
   // Run all steps
   const steps = runAllSteps(args);
 
+  // Aggregate step results for overall ok status
+  // Phase 2C-2: Overall ok=true even if substeps fail (aggregated reporting)
+  const failedSteps = steps.filter(s => s.status === 'executed_dry_run' && s.ok === false);
+  const overallOk = true; // run_daily itself succeeded; step failures are reported in steps[]
+
   // Build success output (deterministic, stable ordering)
   const output = {
+    ok: overallOk,
     command: 'run_daily',
     now: args.now,
     mode: args.mode,
     dry_run: args.dryRun,
     plan_only: args.planOnly,
     steps,
+    summary: {
+      total: steps.length,
+      executed: steps.filter(s => s.status === 'executed_dry_run').length,
+      skipped_unsafe: steps.filter(s => s.status === 'skipped_unsafe').length,
+      missing: steps.filter(s => s.status === 'missing').length,
+      invoked_help: steps.filter(s => s.status === 'invoked_help').length,
+      failed: failedSteps.length
+    },
     notes: [
       args.execute 
-        ? 'Phase 2B: execute mode with --dry-run safety gate' 
-        : 'Phase 2B: plan-only mode (--help invocations)',
+        ? 'Phase 2C-2: execute mode with --dry-run safety gate' 
+        : 'Phase 2C-2: plan-only mode (--help invocations)',
       'Deterministic: --now is required',
       'Fixed step order: intake, draft, approve, send, detect_replies, mark_no_reply, report',
-      'Steps without dry-run support are skipped with status skipped_unsafe'
+      'Steps without dry-run support are skipped with status skipped_unsafe',
+      'Overall ok=true: run_daily succeeded; check steps[] for substep failures'
     ]
   };
 
