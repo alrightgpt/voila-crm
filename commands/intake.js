@@ -23,6 +23,9 @@ const { parseCSV, normalizeLead, generateUUID } = require(path.join(__dirname, '
 const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
 const { withReceipt } = require(path.join(__dirname, '../lib/receipt.js'));
 
+const { assertVoilaSSOT } = require('../lib/ssot');
+assertVoilaSSOT();
+
 const PIPELINE_FILE = path.join(__dirname, '../state/pipeline.json');
 
 function loadPipeline(pipelinePath) {

@@ -29,6 +29,8 @@ const { printError, printOk } = require(path.join(__dirname, '../lib/result.js')
 const { takeSnapshot, diffSummary, assertInvariants, generateProof } = require(path.join(__dirname, '../lib/proof.js'));
 const { sha256FileOrNull, withReceipt } = require(path.join(__dirname, '../lib/receipt.js'));
 
+const { assertVoilaSSOT } = require('../lib/ssot');
+assertVoilaSSOT();
 /**
  * Write receipt and then print output
  */
