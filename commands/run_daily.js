@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 
 /**
- * Voilà Run Daily Orchestrator Scaffold
+ * Voilà Run Daily Orchestrator - Phase 2A
  * Deterministic orchestrator for daily voila automation.
  *
- * This is a SCAFFOLD: no subcommands are executed.
- * Future commits will wire up actual command invocations.
+ * Phase 2A: CLI runner + JSON aggregation (NO MUTATIONS)
+ * - Invokes subcommands via --help (safe, non-mutating)
+ * - Aggregates STRICT JSON outputs
+ * - No pipeline state mutations in this commit
  *
  * CLI:
  *   node commands/run_daily.js --now <ISO8601> [--mode <simulate|send_if_enabled>] [--dry-run]
@@ -23,19 +25,10 @@
  *     "now": "<ISO8601 exactly as provided>",
  *     "mode": "simulate|send_if_enabled",
  *     "dry_run": true|false,
- *     "steps_planned": [
- *       { "name": "intake", "status": "planned" },
- *       { "name": "draft", "status": "planned" },
- *       { "name": "approve", "status": "planned" },
- *       { "name": "send", "status": "planned" },
- *       { "name": "detect_replies", "status": "planned" },
- *       { "name": "mark_no_reply", "status": "planned" },
- *       { "name": "report", "status": "planned" }
+ *     "steps": [
+ *       { "name": "intake", "status": "invoked|missing", "cmd": ["node","commands/intake.js","--help"], "exit_code": 0, "ok_json_parse": true, "output_json": {...} }
  *     ],
- *     "notes": [
- *       "Scaffold only: no subcommands executed",
- *       "Deterministic: --now is required"
- *     ]
+ *     "notes": [...]
  *   }
  *
  *   On error:
@@ -48,21 +41,23 @@
  *
  * Exit codes:
  *   0 - success
- *   2 - invalid arguments (consistent with INVALID_ARGS code)
+ *   2 - invalid arguments
  */
 
 const path = require('path');
+const fs = require('fs');
+const { spawnSync } = require('child_process');
 const { printOk, printError } = require(path.join(__dirname, '../lib/result.js'));
 
 // Fixed order of steps (deterministic)
-const STEPS_PLANNED = [
-  { name: 'intake', status: 'planned' },
-  { name: 'draft', status: 'planned' },
-  { name: 'approve', status: 'planned' },
-  { name: 'send', status: 'planned' },
-  { name: 'detect_replies', status: 'planned' },
-  { name: 'mark_no_reply', status: 'planned' },
-  { name: 'report', status: 'planned' }
+const STEP_DEFINITIONS = [
+  { name: 'intake', script: 'intake.js' },
+  { name: 'draft', script: 'draft.js' },
+  { name: 'approve', script: 'approve.js' },
+  { name: 'send', script: 'send.js' },
+  { name: 'detect_replies', script: 'detect_replies.js' },
+  { name: 'mark_no_reply', script: 'mark_no_reply.js' },
+  { name: 'report', script: null } // No script for report yet
 ];
 
 const VALID_MODES = ['simulate', 'send_if_enabled'];
@@ -120,7 +115,7 @@ function printHelp() {
     ok: true,
     command: 'run_daily',
     help: {
-      description: 'Deterministic orchestrator for daily voila automation (scaffold)',
+      description: 'Deterministic orchestrator for daily voila automation (phase 2a)',
       usage: 'node commands/run_daily.js --now <ISO8601> [--mode <simulate|send_if_enabled>] [--dry-run]',
       arguments: [
         { name: '--now', required: true, description: 'Current timestamp in ISO8601 format', example: '2026-03-04T00:00:00Z' },
@@ -137,11 +132,7 @@ function printHelp() {
 }
 
 /**
- * Print error and exit with specific code (for INVALID_ARGS, use code 2)
- * @param {string} code - Error code
- * @param {string} message - Error message
- * @param {Object|null} details - Error details
- * @param {number} exitCode - Exit code (default 1)
+ * Print error and exit with specific code
  */
 function fail(code, message, details = null, exitCode = 1) {
   const result = {
@@ -152,6 +143,112 @@ function fail(code, message, details = null, exitCode = 1) {
   };
   console.log(JSON.stringify(result, null, 2));
   process.exit(exitCode);
+}
+
+/**
+ * Run a Node command and capture output
+ * Uses spawnSync with args array (no shell features)
+ * 
+ * @param {string[]} argsArray - Arguments to pass to node
+ * @returns {Object} { exit_code, stdout, stderr, parsed_json, ok_json_parse }
+ */
+function runNodeCommand(argsArray) {
+  const result = spawnSync(process.execPath, argsArray, {
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 30000
+  });
+
+  const stdout = result.stdout || '';
+  const stderr = result.stderr || '';
+  const exitCode = result.status !== null ? result.status : -1;
+
+  let parsedJson = null;
+  let okJsonParse = false;
+
+  if (stdout && stdout.trim()) {
+    try {
+      parsedJson = JSON.parse(stdout);
+      okJsonParse = true;
+    } catch (e) {
+      // Not valid JSON, keep parsedJson as null
+    }
+  }
+
+  return {
+    exit_code: exitCode,
+    stdout,
+    stderr,
+    parsed_json: parsedJson,
+    ok_json_parse: okJsonParse
+  };
+}
+
+/**
+ * Invoke a subcommand with --help (safe, non-mutating)
+ * For Phase 2A, we call --help to verify command exists and get its help output
+ * 
+ * @param {Object} stepDef - Step definition { name, script }
+ * @returns {Object} Step result with invocation details
+ */
+function invokeStepSafe(stepDef) {
+  const commandDir = path.join(__dirname);
+  
+  if (!stepDef.script) {
+    // No script defined for this step (e.g., report)
+    return {
+      name: stepDef.name,
+      status: 'missing',
+      cmd: null,
+      exit_code: null,
+      ok_json_parse: false,
+      output_json: null
+    };
+  }
+
+  const scriptPath = path.join(commandDir, stepDef.script);
+  
+  // Check if script exists
+  if (!fs.existsSync(scriptPath)) {
+    return {
+      name: stepDef.name,
+      status: 'missing',
+      cmd: null,
+      exit_code: null,
+      ok_json_parse: false,
+      output_json: null
+    };
+  }
+
+  // Build command args array
+  const cmdArgs = [scriptPath, '--help'];
+  
+  // Run the command
+  const result = runNodeCommand(cmdArgs);
+
+  return {
+    name: stepDef.name,
+    status: 'invoked',
+    cmd: [process.execPath, ...cmdArgs],
+    exit_code: result.exit_code,
+    ok_json_parse: result.ok_json_parse,
+    output_json: result.parsed_json
+  };
+}
+
+/**
+ * Run all steps in fixed order (deterministic)
+ * @returns {Object[]} Array of step results
+ */
+function runAllSteps() {
+  const results = [];
+  
+  for (const stepDef of STEP_DEFINITIONS) {
+    const stepResult = invokeStepSafe(stepDef);
+    results.push(stepResult);
+  }
+  
+  return results;
 }
 
 /**
@@ -196,16 +293,20 @@ function main() {
     );
   }
 
+  // Run all steps (Phase 2A: safe --help invocations only)
+  const steps = runAllSteps();
+
   // Build success output (deterministic, stable ordering)
   const output = {
     command: 'run_daily',
     now: args.now,
     mode: args.mode,
     dry_run: args.dryRun,
-    steps_planned: STEPS_PLANNED,
+    steps,
     notes: [
-      'Scaffold only: no subcommands executed',
-      'Deterministic: --now is required'
+      'Phase 2A: subcommands invoked via --help (no mutations)',
+      'Deterministic: --now is required',
+      'Fixed step order: intake, draft, approve, send, detect_replies, mark_no_reply, report'
     ]
   };
 

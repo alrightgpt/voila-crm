@@ -54,16 +54,16 @@ assert_json_field "$OUTPUT" ".now" "2026-03-04T00:00:00Z"
 assert_json_field "$OUTPUT" ".mode" "simulate"
 assert_json_field "$OUTPUT" ".dry_run" "true"
 
-# Validate steps_planned array
-STEPS_COUNT=$(echo "$OUTPUT" | jq '.steps_planned | length')
+# Validate steps array
+STEPS_COUNT=$(echo "$OUTPUT" | jq '.steps | length')
 if [ "$STEPS_COUNT" -ne 7 ]; then
-    echo "FAIL: Expected 7 steps_planned, got $STEPS_COUNT"
+    echo "FAIL: Expected 7 steps, got $STEPS_COUNT"
     exit 1
 fi
 
 # Validate fixed order of steps
 EXPECTED_STEPS='["intake","draft","approve","send","detect_replies","mark_no_reply","report"]'
-ACTUAL_STEPS=$(echo "$OUTPUT" | jq -c '[.steps_planned[].name]')
+ACTUAL_STEPS=$(echo "$OUTPUT" | jq -c '[.steps[].name]')
 if [ "$ACTUAL_STEPS" != "$EXPECTED_STEPS" ]; then
     echo "FAIL: Steps order mismatch"
     echo "Expected: $EXPECTED_STEPS"
