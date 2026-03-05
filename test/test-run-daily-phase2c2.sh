@@ -176,4 +176,65 @@ fi
 echo "PASS: Test 5"
 echo ""
 
+# Test 6: mark_no_reply step ok==true with --after-days
+echo "Test 6: mark_no_reply step succeeds with --after-days..."
+MARK_STEP=$(echo "$OUTPUT" | jq '.steps[] | select(.name=="mark_no_reply")')
+
+MARK_OK=$(echo "$MARK_STEP" | jq -r '.ok')
+if [ "$MARK_OK" != "true" ]; then
+    echo "FAIL: mark_no_reply step ok should be true"
+    echo "Step: $MARK_STEP"
+    exit 1
+fi
+
+MARK_EXIT=$(echo "$MARK_STEP" | jq '.exit_code')
+if [ "$MARK_EXIT" != "0" ]; then
+    echo "FAIL: mark_no_reply exit_code should be 0"
+    exit 1
+fi
+
+# Verify cmd includes --after-days with default 7
+MARK_CMD=$(echo "$MARK_STEP" | jq -c '.cmd')
+if [[ ! "$MARK_CMD" == *"--after-days"* ]]; then
+    echo "FAIL: mark_no_reply cmd should contain --after-days"
+    exit 1
+fi
+
+if [[ ! "$MARK_CMD" == *"7"* ]]; then
+    echo "FAIL: mark_no_reply cmd should contain default after-days value 7"
+    exit 1
+fi
+
+# Verify after_days is in output
+AFTER_DAYS=$(echo "$OUTPUT" | jq '.after_days')
+if [ "$AFTER_DAYS" != "7" ]; then
+    echo "FAIL: output after_days should be 7"
+    exit 1
+fi
+
+echo "PASS: Test 6"
+echo ""
+
+# Test 7: --after-days -1 => INVALID_ARGS exit 2
+echo "Test 7: --after-days -1 => INVALID_ARGS..."
+set +e
+OUTPUT=$(node "$RUN_DAILY" --now "2026-03-04T00:00:00Z" --after-days -1 --dry-run 2>&1)
+EXIT_CODE=$?
+set -e
+
+if [ "$EXIT_CODE" != "2" ]; then
+    echo "FAIL: Expected exit code 2, got $EXIT_CODE"
+    echo "Output: $OUTPUT"
+    exit 1
+fi
+
+# Verify error JSON
+RESULT_JSON=$(echo "$OUTPUT" | awk '/^{/{found=1} found{print} /^}$/{exit}')
+echo "$RESULT_JSON" | jq -e . > /dev/null || { echo "FAIL: Error output is not valid JSON"; exit 1; }
+assert_json_field "$RESULT_JSON" ".ok" "false"
+assert_json_field "$RESULT_JSON" ".code" "INVALID_ARGS"
+
+echo "PASS: Test 7"
+echo ""
+
 echo "=== All Phase 2C-2 tests passed ==="

@@ -67,6 +67,7 @@ const STEP_DEFINITIONS = [
 
 const VALID_MODES = ['simulate', 'send_if_enabled'];
 const DEFAULT_MODE = 'simulate';
+const DEFAULT_AFTER_DAYS = 7;
 
 /**
  * Parse CLI arguments deterministically
@@ -77,6 +78,7 @@ function parseArgs() {
   const result = {
     now: null,
     mode: DEFAULT_MODE,
+    afterDays: DEFAULT_AFTER_DAYS,
     dryRun: false,
     planOnly: true,  // Default to plan-only
     execute: false,
@@ -91,6 +93,9 @@ function parseArgs() {
       i++;
     } else if (arg === '--mode' && args[i + 1]) {
       result.mode = args[i + 1];
+      i++;
+    } else if (arg === '--after-days' && args[i + 1]) {
+      result.afterDays = args[i + 1];
       i++;
     } else if (arg === '--dry-run') {
       result.dryRun = true;
@@ -324,7 +329,7 @@ function invokeStepExecute(stepDef, args) {
     };
   } else if (stepDef.name === 'mark_no_reply') {
     // mark_no_reply.js needs --now and --after-days
-    cmdArgs = [scriptPath, '--now', args.now, '--dry-run'];
+    cmdArgs = [scriptPath, '--now', args.now, '--after-days', String(args.afterDays), '--dry-run'];
   } else {
     // Generic fallback
     cmdArgs = [scriptPath, '--dry-run'];
@@ -413,6 +418,18 @@ function main() {
     );
   }
 
+  // Validate afterDays is integer >= 0
+  const afterDaysInt = parseInt(args.afterDays, 10);
+  if (isNaN(afterDaysInt) || afterDaysInt < 0) {
+    fail(
+      'INVALID_ARGS',
+      'Invalid --after-days value: must be integer >= 0',
+      { field: 'after_days', provided: args.afterDays, expected: 'non-negative integer' },
+      2
+    );
+  }
+  args.afterDays = afterDaysInt;
+
   // SAFETY: --execute requires --dry-run
   if (args.execute && !args.dryRun) {
     fail(
@@ -440,6 +457,7 @@ function main() {
     command: 'run_daily',
     now: args.now,
     mode: args.mode,
+    after_days: args.afterDays,
     dry_run: args.dryRun,
     plan_only: args.planOnly,
     steps,
