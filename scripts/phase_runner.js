@@ -12,6 +12,8 @@ function main() {
   let receiptPath = null;
   let appendResultPath = null;
   let printNext = false;
+  let resume = null;
+  let dir = null;
   
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
@@ -21,11 +23,21 @@ function main() {
     else if (flag === '--receipt') receiptPath = args[++i];
     else if (flag === '--append-result') appendResultPath = args[++i];
     else if (flag === '--print-next') printNext = true;
+    else if (flag === '--resume') resume = args[++i];
+    else if (flag === '--dir') dir = args[++i];
   }
   
-  if (planPath && outDir && now && !receiptPath) return createReceipt(planPath, outDir, now);
+  if (planPath) {
+    if (!outDir) outDir = 'runs/phases';
+    if (!now) {
+      console.log(JSON.stringify({ ok: false, code: 'INVALID_ARGS', message: 'Missing --now' }, null, 2));
+      process.exit(2);
+    }
+    return createReceipt(planPath, outDir, now);
+  }
   if (receiptPath && appendResultPath && now && !printNext) return appendResult(receiptPath, appendResultPath, now);
   if (receiptPath && printNext && !appendResultPath && !now) return printNextInfo(receiptPath);
+  if (resume) return doResume(resume, dir || 'runs/phases');
   
   console.log(JSON.stringify({
     ok: false,
@@ -50,7 +62,7 @@ function createReceipt(planPath, outDir, now) {
     process.exit(2);
   }
   
-  if (!plan.run_id || !plan.phase_id || !plan.repo_root || !plan.prompt) {
+  if (!plan.run_id || !plan.phase_id || !plan.repo_root || !plan.prompt || typeof plan.phase_index !== 'number') {
     console.log(JSON.stringify({
       ok: false,
       code: 'INVALID_PLAN',
@@ -67,6 +79,7 @@ function createReceipt(planPath, outDir, now) {
     now: now,
     run_id: plan.run_id,
     phase_id: plan.phase_id,
+    phase_index: plan.phase_index,
     repo_root: plan.repo_root,
     prompt: plan.prompt,
     status: 'READY_FOR_EXECUTOR',
@@ -135,6 +148,34 @@ function printNextInfo(receiptPath) {
     next_phase_id: receipt.next_phase_id || null,
     prompt: receipt.prompt
   }, null, 2));
+}
+
+function doResume(runId, dir) {
+  if (!fs.existsSync(dir)) {
+    console.log(JSON.stringify({ ok: false, code: 'NOT_FOUND', message: 'Directory not found', details: { dir } }, null, 2));
+    process.exit(2);
+  }
+  const files = fs.readdirSync(dir).filter(f => f.startsWith(`${runId}.`) && f.endsWith('.json'));
+  if (files.length === 0) {
+    console.log(JSON.stringify({ ok: false, code: 'NOT_FOUND', message: 'No receipts found', details: { run_id: runId } }, null, 2));
+    process.exit(2);
+  }
+  let selected = null, maxIdx = -1;
+  for (const f of files) {
+    let r;
+    try { r = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf-8')); } catch (e) { continue; }
+    if (typeof r.phase_index !== 'number') continue;
+    if (r.phase_index === maxIdx) {
+      console.log(JSON.stringify({ ok: false, code: 'INVALID_STATE', message: 'Duplicate phase_index', details: { phase_index: maxIdx } }, null, 2));
+      process.exit(2);
+    }
+    if (r.phase_index > maxIdx) { maxIdx = r.phase_index; selected = r; }
+  }
+  if (!selected) {
+    console.log(JSON.stringify({ ok: false, code: 'NOT_FOUND', message: 'No valid receipts', details: { run_id: runId } }, null, 2));
+    process.exit(2);
+  }
+  console.log(JSON.stringify({ ok: true, run_id: selected.run_id, current_phase_id: selected.phase_id, current_phase_index: selected.phase_index, next_phase_id: selected.next_phase_id || null, prompt: selected.prompt }, null, 2));
 }
 
 main();
