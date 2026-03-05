@@ -1,16 +1,14 @@
 #!/usr/bin/env node
 
 /**
- * Voilà Run Daily Orchestrator - Phase 2B
+ * Voilà Run Daily Orchestrator - Phase 2D
  * Deterministic orchestrator for daily voila automation.
  *
- * Phase 2B: Execute framework (dry-run gated, skip unsafe)
- * - --plan-only (default): invoke subcommands via --help (safe, non-mutating)
- * - --execute: actually invoke subcommands, but ONLY if --dry-run is also set
- * - Steps without dry-run support are skipped with status "skipped_unsafe"
+ * Phase 2D: detect_replies step wired with --inbox-json support
+ * - --inbox-json <path>: Path to inbox snapshot JSON (enables detect_replies step)
  *
  * CLI:
- *   node commands/run_daily.js --now <ISO8601> [--mode <simulate|send_if_enabled>] [--dry-run] [--plan-only|--execute]
+ *   node commands/run_daily.js --now <ISO8601> [--mode <simulate|send_if_enabled>] [--dry-run] [--plan-only|--execute] [--inbox-json <path>]
  *
  * Arguments:
  *   --now <ISO8601>       REQUIRED: Current timestamp (deterministic, no Date.now())
@@ -18,6 +16,7 @@
  *   --dry-run             Optional: Flag (default: false)
  *   --plan-only           Optional: Plan-only mode (default if --execute not set)
  *   --execute             Optional: Execute mode (requires --dry-run for safety)
+ *   --inbox-json <path>   Optional: Path to inbox snapshot JSON (enables detect_replies)
  *
  * Output (STRICT JSON to stdout):
  *   On success:
@@ -28,6 +27,7 @@
  *     "mode": "simulate|send_if_enabled",
  *     "dry_run": true|false,
  *     "plan_only": true|false,
+ *     "inbox_json": "<path or null>",
  *     "steps": [
  *       {
  *         "name": "send",
@@ -82,6 +82,7 @@ function parseArgs() {
     dryRun: false,
     planOnly: true,  // Default to plan-only
     execute: false,
+    inboxJson: null,
     help: false
   };
 
@@ -105,6 +106,9 @@ function parseArgs() {
     } else if (arg === '--execute') {
       result.execute = true;
       result.planOnly = false;
+    } else if (arg === '--inbox-json' && args[i + 1]) {
+      result.inboxJson = args[i + 1];
+      i++;
     } else if (arg === '--help' || arg === '-h') {
       result.help = true;
     }
@@ -133,14 +137,15 @@ function printHelp() {
     ok: true,
     command: 'run_daily',
     help: {
-      description: 'Deterministic orchestrator for daily voila automation (phase 2b)',
-      usage: 'node commands/run_daily.js --now <ISO8601> [--mode <simulate|send_if_enabled>] [--dry-run] [--plan-only|--execute]',
+      description: 'Deterministic orchestrator for daily voila automation (phase 2d)',
+      usage: 'node commands/run_daily.js --now <ISO8601> [--mode <simulate|send_if_enabled>] [--dry-run] [--plan-only|--execute] [--inbox-json <path>]',
       arguments: [
         { name: '--now', required: true, description: 'Current timestamp in ISO8601 format', example: '2026-03-04T00:00:00Z' },
         { name: '--mode', required: false, default: 'simulate', options: VALID_MODES, description: 'Execution mode' },
         { name: '--dry-run', required: false, default: false, description: 'Dry run flag' },
         { name: '--plan-only', required: false, default: true, description: 'Plan-only mode (invoke --help only)' },
         { name: '--execute', required: false, description: 'Execute mode (requires --dry-run)' },
+        { name: '--inbox-json', required: false, description: 'Path to inbox snapshot JSON (enables detect_replies step)' },
         { name: '--help', required: false, description: 'Print this help' }
       ],
       safety: [
@@ -262,7 +267,7 @@ function invokeStepPlanOnly(stepDef) {
  * Invoke a step in execute mode (with --dry-run safety)
  * 
  * @param {Object} stepDef - Step definition { name, script, supports_dry_run }
- * @param {Object} args - CLI arguments (for --now, etc.)
+ * @param {Object} args - CLI arguments (for --now, --inbox-json, etc.)
  * @returns {Object} Step result with invocation details
  */
 function invokeStepExecute(stepDef, args) {
@@ -309,24 +314,28 @@ function invokeStepExecute(stepDef, args) {
   }
 
   // Build command args array (actual invocation with --dry-run)
-  // Phase 2C-2: Execute send step with --all --mode <mode> --dry-run
+  // Phase 2D: Execute steps with appropriate arguments
   let cmdArgs;
   
   if (stepDef.name === 'send') {
     // send.js args: --all --mode <mode> --dry-run (no --now needed)
     cmdArgs = [scriptPath, '--all', '--mode', args.mode, '--dry-run'];
   } else if (stepDef.name === 'detect_replies') {
-    // detect_replies.js needs --inbox-json and other args (skip for now)
-    return {
-      name: stepDef.name,
-      status: 'skipped_unsafe',
-      supports_dry_run: true,
-      cmd: null,
-      exit_code: null,
-      ok_json_parse: false,
-      output_json: null,
-      reason: 'detect_replies requires --inbox-json; not yet wired'
-    };
+    // detect_replies.js requires --now and --inbox-json
+    if (!args.inboxJson) {
+      return {
+        name: stepDef.name,
+        status: 'skipped_unsafe',
+        supports_dry_run: true,
+        cmd: null,
+        exit_code: null,
+        ok_json_parse: false,
+        output_json: null,
+        reason: 'detect_replies requires --inbox-json; not provided'
+      };
+    }
+    // Invoke with --now, --inbox-json, and --dry-run
+    cmdArgs = [scriptPath, '--now', args.now, '--inbox-json', args.inboxJson, '--dry-run'];
   } else if (stepDef.name === 'mark_no_reply') {
     // mark_no_reply.js needs --now and --after-days
     cmdArgs = [scriptPath, '--now', args.now, '--after-days', String(args.afterDays), '--dry-run'];
@@ -393,7 +402,7 @@ function main() {
     fail(
       'INVALID_ARGS',
       'Missing required argument: --now <ISO8601>',
-      { missing: 'now', usage: 'node commands/run_daily.js --now <ISO8601> [--mode <simulate|send_if_enabled>] [--dry-run] [--plan-only|--execute]' },
+      { missing: 'now', usage: 'node commands/run_daily.js --now <ISO8601> [--mode <simulate|send_if_enabled>] [--dry-run] [--plan-only|--execute] [--inbox-json <path>]' },
       2
     );
   }
@@ -460,6 +469,7 @@ function main() {
     after_days: args.afterDays,
     dry_run: args.dryRun,
     plan_only: args.planOnly,
+    inbox_json: args.inboxJson,
     steps,
     summary: {
       total: steps.length,
@@ -471,11 +481,12 @@ function main() {
     },
     notes: [
       args.execute 
-        ? 'Phase 2C-2: execute mode with --dry-run safety gate' 
-        : 'Phase 2C-2: plan-only mode (--help invocations)',
+        ? 'Phase 2D: execute mode with --dry-run safety gate' 
+        : 'Phase 2D: plan-only mode (--help invocations)',
       'Deterministic: --now is required',
       'Fixed step order: intake, draft, approve, send, detect_replies, mark_no_reply, report',
       'Steps without dry-run support are skipped with status skipped_unsafe',
+      'detect_replies requires --inbox-json to execute; otherwise skipped_unsafe',
       'Overall ok=true: run_daily succeeded; check steps[] for substep failures'
     ]
   };
