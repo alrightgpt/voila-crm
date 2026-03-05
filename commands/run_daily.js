@@ -1,69 +1,84 @@
 #!/usr/bin/env node
 
 /**
- * Voilà Run Daily Orchestrator
- * Run daily voila automation: intake → detect_replies → mark_no_reply
+ * Voilà Run Daily Orchestrator Scaffold
+ * Deterministic orchestrator for daily voila automation.
  *
- * Input (CLI args):
- *   --now <ISO8601>           Required: Current timestamp (for deterministic execution)
- *   --scrape-snapshot <path>  Optional: Path to scrape snapshot JSON (for future intake)
- *   --inbox-snapshot <path>   Optional: Path to inbox snapshot JSON
- *   --dry-run                 Optional: Report what would happen without writing
- *   --prove                   Optional: Attach proof bundles to all commands
+ * This is a SCAFFOLD: no subcommands are executed.
+ * Future commits will wire up actual command invocations.
  *
- * Output (JSON):
+ * CLI:
+ *   node commands/run_daily.js --now <ISO8601> [--mode <simulate|send_if_enabled>] [--dry-run]
+ *
+ * Arguments:
+ *   --now <ISO8601>       REQUIRED: Current timestamp (deterministic, no Date.now())
+ *   --mode <mode>         Optional: "simulate" (default) or "send_if_enabled"
+ *   --dry-run             Optional: Flag (default: false)
+ *
+ * Output (STRICT JSON to stdout):
+ *   On success:
  *   {
  *     "ok": true,
  *     "command": "run_daily",
- *     "now": "<ISO8601>",
+ *     "now": "<ISO8601 exactly as provided>",
+ *     "mode": "simulate|send_if_enabled",
  *     "dry_run": true|false,
- *     "inputs": {
- *       "scrape_snapshot": "<path>",
- *       "inbox_snapshot": "<path>"
- *     },
- *     "steps": [
- *       {
- *         "name": "validate_inputs",
- *         "ok": true|false,
- *         "details": {...}
- *       },
- *       {
- *         "name": "detect_replies",
- *         "invoked": true|false,
- *         "exit_code": <int|null>,
- *         "stdout_json": <object|null>,
- *         "stderr": "<string|null>"
- *       },
- *       {
- *         "name": "mark_no_reply",
- *         "invoked": true|false,
- *         "exit_code": <int|null>,
- *         "stdout_json": <object|null>,
- *         "stderr": "<string|null>"
- *       }
+ *     "steps_planned": [
+ *       { "name": "intake", "status": "planned" },
+ *       { "name": "draft", "status": "planned" },
+ *       { "name": "approve", "status": "planned" },
+ *       { "name": "send", "status": "planned" },
+ *       { "name": "detect_replies", "status": "planned" },
+ *       { "name": "mark_no_reply", "status": "planned" },
+ *       { "name": "report", "status": "planned" }
+ *     ],
+ *     "notes": [
+ *       "Scaffold only: no subcommands executed",
+ *       "Deterministic: --now is required"
  *     ]
  *   }
+ *
+ *   On error:
+ *   {
+ *     "ok": false,
+ *     "code": "INVALID_ARGS",
+ *     "message": "...",
+ *     "details": { ... }
+ *   }
+ *
+ * Exit codes:
+ *   0 - success
+ *   2 - invalid arguments (consistent with INVALID_ARGS code)
  */
 
-const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
-const { printError, printOk } = require(path.join(__dirname, '../lib/result.js'));
+const { printOk, printError } = require(path.join(__dirname, '../lib/result.js'));
 
-const PIPELINE_FILE_DEFAULT = path.join(__dirname, '../state/pipeline.json');
-const CONFIG_FILE_DEFAULT = path.join(__dirname, '../config.json');
+// Fixed order of steps (deterministic)
+const STEPS_PLANNED = [
+  { name: 'intake', status: 'planned' },
+  { name: 'draft', status: 'planned' },
+  { name: 'approve', status: 'planned' },
+  { name: 'send', status: 'planned' },
+  { name: 'detect_replies', status: 'planned' },
+  { name: 'mark_no_reply', status: 'planned' },
+  { name: 'report', status: 'planned' }
+];
+
+const VALID_MODES = ['simulate', 'send_if_enabled'];
+const DEFAULT_MODE = 'simulate';
 
 /**
- * Parse CLI arguments
+ * Parse CLI arguments deterministically
+ * @returns {Object} Parsed arguments
  */
 function parseArgs() {
   const args = process.argv.slice(2);
   const result = {
     now: null,
-    scrapeSnapshot: null,
-    inboxSnapshot: null,
+    mode: DEFAULT_MODE,
     dryRun: false,
-    prove: false
+    help: false
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -72,16 +87,13 @@ function parseArgs() {
     if (arg === '--now' && args[i + 1]) {
       result.now = args[i + 1];
       i++;
-    } else if (arg === '--scrape-snapshot' && args[i + 1]) {
-      result.scrapeSnapshot = args[i + 1];
-      i++;
-    } else if (arg === '--inbox-snapshot' && args[i + 1]) {
-      result.inboxSnapshot = args[i + 1];
+    } else if (arg === '--mode' && args[i + 1]) {
+      result.mode = args[i + 1];
       i++;
     } else if (arg === '--dry-run') {
       result.dryRun = true;
-    } else if (arg === '--prove') {
-      result.prove = true;
+    } else if (arg === '--help' || arg === '-h') {
+      result.help = true;
     }
   }
 
@@ -89,229 +101,111 @@ function parseArgs() {
 }
 
 /**
- * Validate ISO8601 timestamp
+ * Validate ISO8601 timestamp format
+ * Uses Date.parse ONLY for validation, not for generating time.
+ * @param {string} timestamp - The timestamp to validate
+ * @returns {boolean} True if valid ISO8601
  */
 function isValidISO8601(timestamp) {
-  try {
-    const date = new Date(timestamp);
-    return !isNaN(date.getTime()) && date.toISOString() === timestamp;
-  } catch {
-    return false;
-  }
+  if (typeof timestamp !== 'string') return false;
+  const parsed = Date.parse(timestamp);
+  return !isNaN(parsed);
 }
 
 /**
- * Validate input files exist (unless dry-run)
+ * Print help as STRICT JSON
  */
-function validateInputs(args) {
-  const errors = [];
-  const details = {};
-
-  // Validate scrape snapshot
-  if (args.scrapeSnapshot) {
-    details.scrape_snapshot = {
-      provided: true,
-      path: args.scrapeSnapshot,
-      exists: fs.existsSync(args.scrapeSnapshot)
-    };
-
-    if (!args.dryRun && !fs.existsSync(args.scrapeSnapshot)) {
-      errors.push({
-        field: 'scrape_snapshot',
-        message: 'Scrape snapshot file does not exist',
-        path: args.scrapeSnapshot
-      });
+function printHelp() {
+  console.log(JSON.stringify({
+    ok: true,
+    command: 'run_daily',
+    help: {
+      description: 'Deterministic orchestrator for daily voila automation (scaffold)',
+      usage: 'node commands/run_daily.js --now <ISO8601> [--mode <simulate|send_if_enabled>] [--dry-run]',
+      arguments: [
+        { name: '--now', required: true, description: 'Current timestamp in ISO8601 format', example: '2026-03-04T00:00:00Z' },
+        { name: '--mode', required: false, default: 'simulate', options: VALID_MODES, description: 'Execution mode' },
+        { name: '--dry-run', required: false, default: false, description: 'Dry run flag' },
+        { name: '--help', required: false, description: 'Print this help' }
+      ],
+      exit_codes: [
+        { code: 0, description: 'Success' },
+        { code: 2, description: 'Invalid arguments' }
+      ]
     }
-  } else {
-    details.scrape_snapshot = {
-      provided: false,
-      path: null,
-      exists: null
-    };
-  }
+  }, null, 2));
+}
 
-  // Validate inbox snapshot
-  if (args.inboxSnapshot) {
-    details.inbox_snapshot = {
-      provided: true,
-      path: args.inboxSnapshot,
-      exists: fs.existsSync(args.inboxSnapshot)
-    };
-
-    if (!args.dryRun && !fs.existsSync(args.inboxSnapshot)) {
-      errors.push({
-        field: 'inbox_snapshot',
-        message: 'Inbox snapshot file does not exist',
-        path: args.inboxSnapshot
-      });
-    }
-  } else {
-    details.inbox_snapshot = {
-      provided: false,
-      path: null,
-      exists: null
-    };
-  }
-
-  return {
-    ok: errors.length === 0,
-    errors,
+/**
+ * Print error and exit with specific code (for INVALID_ARGS, use code 2)
+ * @param {string} code - Error code
+ * @param {string} message - Error message
+ * @param {Object|null} details - Error details
+ * @param {number} exitCode - Exit code (default 1)
+ */
+function fail(code, message, details = null, exitCode = 1) {
+  const result = {
+    ok: false,
+    code,
+    message,
     details
-  }
-
-  ;
-}
-
-/**
- * Spawn a voila command and capture output
- */
-function spawnCommand(commandName, args) {
-  const commandPath = path.join(__dirname, `${commandName}.js`);
-  const spawnArgs = [];
-
-  // Build spawn args
-  for (const [key, value] of Object.entries(args)) {
-    // Convert camelCase to kebab-case
-    const kebabKey = key.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`);
-
-    if (value === true) {
-      spawnArgs.push(`--${kebabKey}`);
-    } else if (value !== null && value !== false) {
-      spawnArgs.push(`--${kebabKey}`);
-      spawnArgs.push(String(value));
-    }
-  }
-
-  const result = spawnSync('node', [commandPath, ...spawnArgs], {
-    encoding: 'utf-8',
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
-
-  let stdoutJson = null;
-  if (result.stdout && result.stdout.trim()) {
-    try {
-      stdoutJson = JSON.parse(result.stdout);
-    } catch (e) {
-      // Not valid JSON, keep as string in stderr
-    }
-  }
-
-  return {
-    invoked: true,
-    exitCode: result.status,
-    stdoutJson,
-    stderr: result.stderr || null,
-    signal: result.signal
   };
+  console.log(JSON.stringify(result, null, 2));
+  process.exit(exitCode);
 }
 
 /**
- * Run detect_replies command
- */
-function runDetectReplies(args) {
-  if (!args.inboxSnapshot) {
-    return {
-      invoked: false,
-      exitCode: null,
-      stdoutJson: null,
-      stderr: 'No inbox snapshot provided'
-    };
-  }
-
-  const commandArgs = {
-    inboxJson: args.inboxSnapshot,
-    dryRun: args.dryRun,
-    prove: args.prove,
-    pipeline: PIPELINE_FILE_DEFAULT,
-    config: CONFIG_FILE_DEFAULT
-  };
-
-  return spawnCommand('detect_replies', commandArgs);
-}
-
-/**
- * Run mark_no_reply command
- */
-function runMarkNoReply(args) {
-  // Default to 3 days for marking no reply
-  const afterDays = 3;
-
-  const commandArgs = {
-    now: args.now,
-    afterDays: afterDays,
-    dryRun: args.dryRun,
-    prove: args.prove,
-    pipeline: PIPELINE_FILE_DEFAULT,
-    config: CONFIG_FILE_DEFAULT
-  };
-
-  return spawnCommand('mark_no_reply', commandArgs);
-}
-
-/**
- * Main function
+ * Main entry point
  */
 function main() {
   const args = parseArgs();
 
-  // Validate required args
+  // Handle help flag
+  if (args.help) {
+    printHelp();
+    process.exit(0);
+  }
+
+  // Validate required --now argument
   if (!args.now) {
-    fail('INVALID_ARGS', 'Missing required argument: --now <ISO8601>', {
-      usage: 'voila/run_daily --now <ISO8601> [--scrape-snapshot <path>] [--inbox-snapshot <path>] [--dry-run] [--prove]',
-      examples: [
-        'voila/run_daily --now 2026-03-03T11:14:00.000Z --scrape-snapshot /path/to/scrape.json --inbox-snapshot /path/to/inbox.json',
-        'voila/run_daily --now 2026-03-03T11:14:00.000Z --inbox-snapshot /path/to/inbox.json --dry-run'
-      ]
-    });
+    fail(
+      'INVALID_ARGS',
+      'Missing required argument: --now <ISO8601>',
+      { missing: 'now', usage: 'node commands/run_daily.js --now <ISO8601> [--mode <simulate|send_if_enabled>] [--dry-run]' },
+      2
+    );
   }
 
-  // Validate ISO8601 timestamp
+  // Validate ISO8601 format
   if (!isValidISO8601(args.now)) {
-    fail('INVALID_ARGS', 'Invalid ISO8601 timestamp format', {
-      provided: args.now,
-      expected_format: '2026-03-03T11:14:00.000Z'
-    });
+    fail(
+      'INVALID_ARGS',
+      'Invalid ISO8601 timestamp format',
+      { field: 'now', provided: args.now, expected: 'ISO8601 format (e.g., 2026-03-04T00:00:00Z)' },
+      2
+    );
   }
 
-  // Step 1: Validate inputs
-  const validateResult = validateInputs(args);
+  // Validate mode
+  if (!VALID_MODES.includes(args.mode)) {
+    fail(
+      'INVALID_ARGS',
+      'Invalid mode value',
+      { field: 'mode', provided: args.mode, valid_values: VALID_MODES },
+      2
+    );
+  }
 
-  // Step 2: Run detect_replies
-  const detectRepliesResult = runDetectReplies(args);
-
-  // Step 3: Run mark_no_reply
-  const markNoReplyResult = runMarkNoReply(args);
-
-  // Build output
+  // Build success output (deterministic, stable ordering)
   const output = {
-    ok: true,
     command: 'run_daily',
     now: args.now,
+    mode: args.mode,
     dry_run: args.dryRun,
-    inputs: {
-      scrape_snapshot: args.scrapeSnapshot,
-      inbox_snapshot: args.inboxSnapshot
-    },
-    steps: [
-      {
-        name: 'validate_inputs',
-        ok: validateResult.ok,
-        details: validateResult.details
-      },
-      {
-        name: 'detect_replies',
-        invoked: detectRepliesResult.invoked,
-        exit_code: detectRepliesResult.exitCode,
-        stdout_json: detectRepliesResult.stdoutJson,
-        stderr: detectRepliesResult.stderr
-      },
-      {
-        name: 'mark_no_reply',
-        invoked: markNoReplyResult.invoked,
-        exit_code: markNoReplyResult.exitCode,
-        stdout_json: markNoReplyResult.stdoutJson,
-        stderr: markNoReplyResult.stderr
-      }
+    steps_planned: STEPS_PLANNED,
+    notes: [
+      'Scaffold only: no subcommands executed',
+      'Deterministic: --now is required'
     ]
   };
 
@@ -319,6 +213,4 @@ function main() {
   process.exit(0);
 }
 
-main().catch(error => {
-  printError('UNHANDLED_ERROR', error.message, null);
-});
+main();
