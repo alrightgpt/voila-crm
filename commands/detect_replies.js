@@ -5,11 +5,12 @@
  * Automatically mark matching leads as REPLIED based on inbound messages
  *
  * Input (CLI args):
- *   --inbox-json <path>    Required: Path to JSON file with inbound messages
+ *   --now <ISO8601>         Required: Current timestamp in ISO8601 format (deterministic time source)
+ *   --inbox-json <path>     Required: Path to JSON file with inbound messages
  *   --dry-run               Optional: Report what would happen without writing
  *   --prove                 Optional: Attach proof bundle using Phase 3 proof.js
- *   --pipeline <path>        Optional: Path to pipeline.json (default: state/pipeline.json)
- *   --config <path>          Optional: Path to config.json (default: config.json)
+ *   --pipeline <path>       Optional: Path to pipeline.json (default: state/pipeline.json)
+ *   --config <path>         Optional: Path to config.json (default: config.json)
  *
  * Output (JSON):
  *   {
@@ -41,6 +42,12 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+function isValidISO8601(str) {
+  // ISO8601 format: YYYY-MM-DDTHH:MM:SSZ or YYYY-MM-DDTHH:MM:SS+HH:MM
+  const iso8601Regex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$/;
+  return iso8601Regex.test(str);
+}
+
 function loadInbox(inboxPath) {
   try {
     const content = fs.readFileSync(inboxPath, 'utf-8');
@@ -70,19 +77,29 @@ function loadConfig(configPath) {
   return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
 }
 
-function savePipeline(pipeline, pipelinePath) {
-  pipeline.last_updated = new Date().toISOString();
+function savePipeline(pipeline, pipelinePath, nowTimestamp) {
+  pipeline.last_updated = nowTimestamp;
   fs.writeFileSync(pipelinePath, JSON.stringify(pipeline, null, 2));
 }
 
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { inboxPath: null, dryRun: false, prove: false, pipelinePath: PIPELINE_FILE_DEFAULT, configPath: CONFIG_FILE_DEFAULT };
+  const result = { 
+    now: null, 
+    inboxPath: null, 
+    dryRun: false, 
+    prove: false, 
+    pipelinePath: PIPELINE_FILE_DEFAULT, 
+    configPath: CONFIG_FILE_DEFAULT 
+  };
   
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     
-    if (arg === '--inbox-json' && args[i + 1]) {
+    if (arg === '--now' && args[i + 1]) {
+      result.now = args[i + 1];
+      i++;
+    } else if (arg === '--inbox-json' && args[i + 1]) {
       result.inboxPath = args[i + 1];
       i++;
     } else if (arg === '--dry-run') {
@@ -104,13 +121,37 @@ function parseArgs() {
 async function main() {
   const args = parseArgs();
   
+  // Validate --now
+  if (!args.now) {
+    printError('INVALID_ARGS', 'Missing required argument: --now <ISO8601>', {
+      usage: 'voila/detect_replies --now <ISO8601> --inbox-json <path> [--dry-run] [--prove] [--pipeline <path>] [--config <path>]',
+      examples: [
+        'voila/detect_replies --now 2026-03-04T00:00:00Z --inbox-json /path/to/inbox.json',
+        'voila/detect_replies --now 2026-03-04T00:00:00Z --inbox-json /path/to/inbox.json --dry-run',
+        'voila/detect_replies --now 2026-03-04T00:00:00Z --inbox-json /path/to/inbox.json --prove'
+      ]
+    });
+  }
+  
+  if (!isValidISO8601(args.now)) {
+    printError('INVALID_ARGS', 'Invalid --now argument: must be ISO8601 format (YYYY-MM-DDTHH:MM:SSZ)', {
+      provided: args.now,
+      usage: 'voila/detect_replies --now <ISO8601> --inbox-json <path> [--dry-run] [--prove] [--pipeline <path>] [--config <path>]',
+      examples: [
+        'voila/detect_replies --now 2026-03-04T00:00:00Z --inbox-json /path/to/inbox.json',
+        'voila/detect_replies --now 2026-03-04T00:00:00Z --inbox-json /path/to/inbox.json --dry-run',
+        'voila/detect_replies --now 2026-03-04T00:00:00Z --inbox-json /path/to/inbox.json --prove'
+      ]
+    });
+  }
+  
   if (!args.inboxPath) {
     printError('INVALID_ARGS', 'Missing required argument: --inbox-json <path>', {
-      usage: 'voila/detect_replies --inbox-json <path> [--dry-run] [--prove] [--pipeline <path>] [--config <path>]',
+      usage: 'voila/detect_replies --now <ISO8601> --inbox-json <path> [--dry-run] [--prove] [--pipeline <path>] [--config <path>]',
       examples: [
-        'voila/detect_replies --inbox-json /path/to/inbox.json',
-        'voila/detect_replies --inbox-json /path/to/inbox.json --dry-run',
-        'voila/detect_replies --inbox-json /path/to/inbox.json --prove'
+        'voila/detect_replies --now 2026-03-04T00:00:00Z --inbox-json /path/to/inbox.json',
+        'voila/detect_replies --now 2026-03-04T00:00:00Z --inbox-json /path/to/inbox.json --dry-run',
+        'voila/detect_replies --now 2026-03-04T00:00:00Z --inbox-json /path/to/inbox.json --prove'
       ]
     });
   }
@@ -249,7 +290,7 @@ async function main() {
   }
   
   if (updated > 0 && !args.dryRun) {
-    savePipeline(pipeline, args.pipelinePath);
+    savePipeline(pipeline, args.pipelinePath, args.now);
   }
   
   let proofOutput = undefined;
