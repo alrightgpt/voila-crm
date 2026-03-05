@@ -1,0 +1,99 @@
+{
+  "after_days": 7,
+  "command": "run_daily",
+  "dry_run": true,
+  "inbox_json": "<INBOX_JSON_PATH>",
+  "mode": "simulate",
+  "now": "2026-03-04T00:00:00Z",
+  "ok": true,
+  "plan_only": false,
+  "steps": [
+    {
+      "exit_code": null,
+      "name": "intake",
+      "ok": null,
+      "ok_json_parse": false,
+      "output": null,
+      "reason": "Step does not support --dry-run; skipped for safety",
+      "status": "skipped_unsafe",
+      "supports_dry_run": false
+    },
+    {
+      "exit_code": null,
+      "name": "draft",
+      "ok": null,
+      "ok_json_parse": false,
+      "output": null,
+      "reason": "Step does not support --dry-run; skipped for safety",
+      "status": "skipped_unsafe",
+      "supports_dry_run": false
+    },
+    {
+      "exit_code": null,
+      "name": "approve",
+      "ok": null,
+      "ok_json_parse": false,
+      "output": null,
+      "reason": "Step does not support --dry-run; skipped for safety",
+      "status": "skipped_unsafe",
+      "supports_dry_run": false
+    },
+    {
+      "exit_code": 0,
+      "name": "send",
+      "ok": true,
+      "ok_json_parse": true,
+      "output": {
+        "error": null,
+        "ok": true
+      },
+      "reason": null,
+      "status": "executed_dry_run",
+      "supports_dry_run": true
+    },
+    {
+      "exit_code": 0,
+      "name": "detect_replies",
+      "ok": true,
+      "ok_json_parse": true,
+      "output": {
+        "error": null,
+        "ok": true
+      },
+      "reason": null,
+      "status": "executed_dry_run",
+      "supports_dry_run": true
+    },
+    {
+      "exit_code": 0,
+      "name": "mark_no_reply",
+      "ok": true,
+      "ok_json_parse": true,
+      "output": {
+        "error": null,
+        "ok": true
+      },
+      "reason": null,
+      "status": "executed_dry_run",
+      "supports_dry_run": true
+    },
+    {
+      "exit_code": null,
+      "name": "report",
+      "ok": null,
+      "ok_json_parse": false,
+      "output": null,
+      "reason": null,
+      "status": "missing",
+      "supports_dry_run": false
+    }
+  ],
+  "summary": {
+    "executed": 3,
+    "failed": 0,
+    "invoked_help": 0,
+    "missing": 1,
+    "skipped_unsafe": 3,
+    "total": 7
+  }
+}
